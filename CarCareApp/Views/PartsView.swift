@@ -159,7 +159,7 @@ private struct PartRowView: View {
                 let milesSince = currentMileage - part.mileage
                 Text("\(Formatters.mileageLabel(abs(milesSince))) mi since last replacement")
                     .font(.caption)
-                    .foregroundColor(milesSince >= 0 ? .secondary : .red)
+                    .foregroundColor(milesSince >= 0 ? Color(uiColor: .secondaryLabel) : .red)
             }
 
             if let linked = vehicle.log(with: part.linkedServiceLogID) {

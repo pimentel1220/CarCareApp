@@ -226,7 +226,7 @@ struct VehicleOverviewView: View {
             } else if dueSoonCount > 0 {
                 Label("\(dueSoonCount) reminder\(dueSoonCount == 1 ? "" : "s") due soon", systemImage: "clock.badge.exclamationmark.fill")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.yellow)
+                    .foregroundStyle(.orange)
             } else {
                 Label("No overdue reminders right now", systemImage: "checkmark.circle.fill")
                     .font(.caption.weight(.semibold))
@@ -249,11 +249,11 @@ struct VehicleOverviewView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 18))
         } else {
             RoundedRectangle(cornerRadius: 18)
-                .fill(Color.blue.opacity(0.14))
+                .fill(Color(.secondarySystemBackground))
                 .overlay {
                     Image(systemName: "car.fill")
                         .font(.title2)
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(.tint)
                 }
                 .frame(width: 80, height: 80)
         }
@@ -293,7 +293,7 @@ private struct OverviewMetricCard: View {
             .padding(14)
             .background(
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.secondary.opacity(0.09))
+                    .fill(Color(.secondarySystemBackground))
             )
         }
         .buttonStyle(.plain)
@@ -325,7 +325,7 @@ private struct OverviewReminderRow: View {
                     }
                 }
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(detailColor(for: urgency))
             }
 
             Spacer()
@@ -363,6 +363,15 @@ private struct OverviewReminderRow: View {
         case .dueSoon: return .orange
         case .upcoming: return .blue
         case .completed: return .secondary
+        }
+    }
+
+    private func detailColor(for urgency: ReminderUrgency) -> Color {
+        switch urgency {
+        case .overdue, .dueSoon:
+            return urgencyColor(urgency)
+        case .upcoming, .completed:
+            return .secondary
         }
     }
 

@@ -14,10 +14,10 @@ struct VehicleRowView: View {
             } else {
                 ZStack {
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.blue.opacity(0.15))
+                        .fill(Color(.secondarySystemBackground))
                     Image(systemName: "car.fill")
                         .font(.title2)
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(.tint)
                 }
                 .frame(width: 56, height: 56)
             }

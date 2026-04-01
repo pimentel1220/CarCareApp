@@ -271,7 +271,7 @@ private struct ReminderRowView: View {
                 }
             }
             .font(.caption)
-            .foregroundStyle(urgency == .overdue ? .red : .secondary)
+            .foregroundStyle(detailColor(for: urgency))
 
             if let linked = vehicle.log(with: reminder.linkedServiceLogID) {
                 Text("Linked service: \(linked.title ?? "Service")")
@@ -308,6 +308,15 @@ private struct ReminderRowView: View {
         case .dueSoon: return .orange
         case .upcoming: return .blue
         case .completed: return .secondary
+        }
+    }
+
+    private func detailColor(for urgency: ReminderUrgency) -> Color {
+        switch urgency {
+        case .overdue, .dueSoon:
+            return urgencyColor(urgency)
+        case .upcoming, .completed:
+            return .secondary
         }
     }
 
