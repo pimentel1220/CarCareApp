@@ -1,4 +1,4 @@
-# CarCareApp TestFlight Notes (Template)
+# CarCare Maintenance TestFlight Notes (Template)
 
 ## What To Test
 - Add vehicle and decode VIN.

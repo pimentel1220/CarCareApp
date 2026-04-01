@@ -53,6 +53,9 @@ struct VehicleInfoView: View {
                 Button("Edit Vehicle") {
                     showingEdit = true
                 }
+                Text("Everything here can be updated later, so you do not need to get it perfect the first time.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Vehicle Info") {
@@ -74,49 +77,52 @@ struct VehicleInfoView: View {
                 TextField("Mileage", text: $mileageText)
                     .keyboardType(.numbersAndPunctuation)
 
-                Button("Save Mileage") {
+                Button("Update Mileage") {
                     if let mileage = Formatters.parseMileage(mileageText) {
                         guard mileage >= vehicle.latestKnownMileage else {
                             AppErrorCenter.shared.message = "Mileage cannot be lower than the current value."
                             return
                         }
                         vehicle.currentMileage = mileage
-                        saveContext()
+                        saveContext(successMessage: "Mileage updated")
                     }
                 }
+                Text("Use the most current odometer reading you have.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Actions") {
                 Button("Edit Vehicle") {
                     showingEdit = true
                 }
-                Button(isDecodingVIN ? "Decoding VIN..." : "Decode VIN") {
+                Button(isDecodingVIN ? "Filling Details From VIN..." : "Fill Details From VIN") {
                     decodeVIN()
                 }
                 .disabled(isDecodingVIN)
-                Text("VIN decoding sends the VIN to a secure external lookup service to fill vehicle details.")
+                Text("VIN lookup can fill in details like year, make, model, trim, and engine for you.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
 
             Section("Backups") {
-                Text("Backups include ownership records and optional photos. Provider credentials and developer settings are never exported.")
+                Text("Use a backup if you want an extra copy of this vehicle's history. Backups include your records and optional photos, but never provider credentials.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Button("Export Vehicle Backup") {
+                Button("Save Backup Copy") {
                     exportBackup()
                 }
-                Button("Import Vehicle Backup") {
+                Button("Restore From Backup") {
                     showBackupImporter = true
                 }
                 if let lastBackupExportDate {
-                    Text("Last backup exported: \(lastBackupExportDate.formatted(date: .abbreviated, time: .shortened))")
+                    Text("Last backup saved: \(lastBackupExportDate.formatted(date: .abbreviated, time: .shortened))")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
             }
 
-            Section("Developer Settings") {
+            Section("Advanced Settings") {
                 NavigationLink {
                     VehicleDeveloperSettingsView(
                         vehicle: vehicle,
@@ -156,9 +162,9 @@ struct VehicleInfoView: View {
                         providerStatusColor: providerStatusColor
                     )
                 } label: {
-                    Label("Open Developer Settings", systemImage: "gearshape.2")
+                    Label("Open Advanced Settings", systemImage: "gearshape.2")
                 }
-                Text("Advanced sync, provider setup, replace-import mode, style tools, and auto-backup live here.")
+                Text("These options are only needed if you want backup automation or provider-based schedule syncing.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -244,7 +250,7 @@ struct VehicleInfoView: View {
             case .success:
                 recordLastBackupExportDate(Date())
                 recordBackupSnapshot()
-                AppFeedbackCenter.shared.show("Backup exported")
+                AppFeedbackCenter.shared.show("Backup ready to save")
             case .failure(let error):
                 AppErrorCenter.shared.message = userSafeBackupMessage(for: error, defaultMessage: "Backup export failed.")
             }
@@ -256,20 +262,20 @@ struct VehicleInfoView: View {
         ) { result in
             handleImportResult(result)
         }
-        .alert("Import Backup?", isPresented: $showImportConfirm) {
+        .alert("Restore Backup?", isPresented: $showImportConfirm) {
             Button("Cancel", role: .cancel) {
                 pendingImportData = nil
                 pendingImportPayload = nil
             }
-            Button("Import", role: .destructive) {
+            Button("Restore", role: .destructive) {
                 applyPendingImport()
             }
         } message: {
             Text(importPreviewText)
         }
-        .alert("Backup Recommended", isPresented: $showAutoBackupPrompt) {
+        .alert("Backup Reminder", isPresented: $showAutoBackupPrompt) {
             Button("Not now", role: .cancel) {}
-            Button("Export Now") {
+            Button("Save Backup") {
                 exportBackup()
             }
         } message: {
@@ -591,7 +597,7 @@ struct VehicleInfoView: View {
     }
 
     private var backupFilename: String {
-        "carcare-backup-\(backupTimestamp())"
+        "carcare-maintenance-backup-\(backupTimestamp())"
     }
 
     private func backupTimestamp() -> String {
@@ -634,25 +640,25 @@ struct VehicleInfoView: View {
             return
         case .weekly, .biweekly, .monthly:
             guard let lastBackup = lastBackupExportDate else {
-                autoBackupPromptMessage = "No backup found yet. Export a backup now?"
+                autoBackupPromptMessage = "You do not have a backup saved yet. Save one now?"
                 showAutoBackupPrompt = true
                 return
             }
             let days = autoBackupMode.dayInterval
             guard let dueDate = Calendar.current.date(byAdding: .day, value: days, to: lastBackup) else { return }
             if Date() >= dueDate {
-                autoBackupPromptMessage = "Your last backup was \(lastBackup.formatted(date: .abbreviated, time: .shortened)). Export a new backup now?"
+                autoBackupPromptMessage = "Your last backup was saved on \(lastBackup.formatted(date: .abbreviated, time: .shortened)). Save a fresh backup now?"
                 showAutoBackupPrompt = true
             }
         case .changes:
             guard lastBackupExportDate != nil else {
-                autoBackupPromptMessage = "No backup found yet. Export a backup now?"
+                autoBackupPromptMessage = "You do not have a backup saved yet. Save one now?"
                 showAutoBackupPrompt = true
                 return
             }
             let delta = max(0, currentTotalRecordCount - backupRecordSnapshot)
             if delta >= autoBackupChangeThreshold {
-                autoBackupPromptMessage = "\(delta) new records were added since your last backup. Export now?"
+                autoBackupPromptMessage = "\(delta) new records were added since your last backup. Save a fresh backup now?"
                 showAutoBackupPrompt = true
             }
         }
@@ -664,14 +670,14 @@ struct VehicleInfoView: View {
             backupDocument = VehicleBackupDocument(data: data)
             showBackupExporter = true
         } catch {
-            AppErrorCenter.shared.message = userSafeBackupMessage(for: error, defaultMessage: "Backup export failed.")
+            AppErrorCenter.shared.message = userSafeBackupMessage(for: error, defaultMessage: "Could not prepare the backup right now.")
         }
     }
 
     private func handleImportResult(_ result: Result<[URL], Error>) {
         switch result {
         case .failure(let error):
-            AppErrorCenter.shared.message = userSafeBackupMessage(for: error, defaultMessage: "Backup import failed.")
+            AppErrorCenter.shared.message = userSafeBackupMessage(for: error, defaultMessage: "Could not open that backup file.")
         case .success(let urls):
             guard let url = urls.first else { return }
             importBackup(from: url)
@@ -693,7 +699,7 @@ struct VehicleInfoView: View {
             pendingImportPayload = payload
             showImportConfirm = true
         } catch {
-            AppErrorCenter.shared.message = userSafeBackupMessage(for: error, defaultMessage: "Backup import failed.")
+            AppErrorCenter.shared.message = userSafeBackupMessage(for: error, defaultMessage: "Could not read that backup file.")
         }
     }
 
@@ -708,33 +714,34 @@ struct VehicleInfoView: View {
             )
             pendingImportData = nil
             pendingImportPayload = nil
-            saveContext(successMessage: "Imported \(summary.logs) service(s), \(summary.reminders) reminder(s), \(summary.parts) part(s)")
+            saveContext(successMessage: "Backup restored: \(summary.logs) service(s), \(summary.reminders) reminder(s), \(summary.parts) part(s)")
         } catch {
             viewContext.rollback()
             pendingImportData = nil
             pendingImportPayload = nil
-            AppErrorCenter.shared.message = userSafeBackupMessage(for: error, defaultMessage: "Backup import failed.")
+            AppErrorCenter.shared.message = userSafeBackupMessage(for: error, defaultMessage: "Could not restore from that backup.")
         }
     }
 
     private var importPreviewText: String {
         guard let payload = pendingImportPayload else {
-            return "This will import backup data into the current vehicle."
+            return "This will restore backup data into the current vehicle."
         }
         let vehicleName = payload.vehicle.displayName
         if replaceExistingOnImport {
             return """
-            Mode: Replace existing data
-            Warning: This will delete current data first.
-            Will delete now: \(currentLogCount) service(s), \(currentReminderCount) reminder(s), \(currentPartCount) part(s)
-            Import file vehicle: \(vehicleName)
-            Import file items: \(payload.logs.count) service(s), \(payload.reminders.count) reminder(s), \(payload.parts.count) part(s)
+            Restore mode: Replace current records
+            This will remove the current history for this vehicle before restoring the backup.
+            Current records to remove: \(currentLogCount) service(s), \(currentReminderCount) reminder(s), \(currentPartCount) part(s)
+            Backup vehicle: \(vehicleName)
+            Backup contents: \(payload.logs.count) service(s), \(payload.reminders.count) reminder(s), \(payload.parts.count) part(s)
             """
         }
         return """
-        Mode: Merge with existing data
-        Import file vehicle: \(vehicleName)
-        Import file items: \(payload.logs.count) service(s), \(payload.reminders.count) reminder(s), \(payload.parts.count) part(s)
+        Restore mode: Keep current records
+        The backup will be merged into this vehicle.
+        Backup vehicle: \(vehicleName)
+        Backup contents: \(payload.logs.count) service(s), \(payload.reminders.count) reminder(s), \(payload.parts.count) part(s)
         """
     }
 
@@ -975,10 +982,10 @@ private struct VehicleDeveloperSettingsView: View {
             }
 
             Section("Import & Auto Backup") {
-                Text("Normal backup export and import live on the main Info screen. Replace mode is kept here because it is destructive.")
+                Text("Everyday backup actions stay on the main Info screen. Replace mode is kept here because it can remove current records.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Toggle("Replace Existing Data on Import", isOn: $replaceExistingOnImport)
+                Toggle("Replace Current Records During Restore", isOn: $replaceExistingOnImport)
                     .font(.caption)
                 Picker("Auto Backup", selection: $autoBackupMode) {
                     ForEach(AutoBackupMode.allCases) { mode in
@@ -995,13 +1002,13 @@ private struct VehicleDeveloperSettingsView: View {
                     .font(.caption)
                 }
                 if let lastBackupExportDate {
-                    Text("Last backup exported: \(lastBackupExportDate.formatted(date: .abbreviated, time: .shortened))")
+                    Text("Last backup saved: \(lastBackupExportDate.formatted(date: .abbreviated, time: .shortened))")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
             }
         }
-        .navigationTitle("Developer Settings")
+        .navigationTitle("Advanced Settings")
         .navigationBarTitleDisplayMode(.inline)
     }
 }

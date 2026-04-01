@@ -1,4 +1,4 @@
-# CarCareApp Beta Release Checklist
+# CarCare Maintenance Beta Release Checklist
 
 ## 1) Xcode/Signing
 - Open `CarCareApp.xcodeproj`.
