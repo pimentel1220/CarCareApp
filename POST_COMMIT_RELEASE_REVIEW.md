@@ -4,21 +4,21 @@
 This review covers the current launch-prep working tree after the latest overview, security, App Store, and QA preparation changes.
 
 ## Latest Changed Files Reviewed
-- `/Users/carlos/Documents/New project/CarCareApp/APP_STORE_LAUNCH_CHECKLIST.md`
-- `/Users/carlos/Documents/New project/CarCareApp/APP_STORE_METADATA_DRAFT.md`
-- `/Users/carlos/Documents/New project/CarCareApp/APP_STORE_SCREENSHOT_PLAN.md`
-- `/Users/carlos/Documents/New project/CarCareApp/DEVICE_QA_CHECKLIST.md`
-- `/Users/carlos/Documents/New project/CarCareApp/SECURITY_PROVIDER_STORAGE_NOTES.md`
-- `/Users/carlos/Documents/New project/CarCareApp/CarCareApp/Models/Vehicle+CoreDataProperties.swift`
-- `/Users/carlos/Documents/New project/CarCareApp/CarCareApp/Services/ManufacturerScheduleSync.swift`
-- `/Users/carlos/Documents/New project/CarCareApp/CarCareApp/Services/SecureKeychainService.swift`
-- `/Users/carlos/Documents/New project/CarCareApp/CarCareApp/Views/GarageView.swift`
-- `/Users/carlos/Documents/New project/CarCareApp/CarCareApp/Views/MaintenanceLogView.swift`
-- `/Users/carlos/Documents/New project/CarCareApp/CarCareApp/Views/PartsView.swift`
-- `/Users/carlos/Documents/New project/CarCareApp/CarCareApp/Views/RemindersView.swift`
-- `/Users/carlos/Documents/New project/CarCareApp/CarCareApp/Views/VehicleInfoView.swift`
-- `/Users/carlos/Documents/New project/CarCareApp/CarCareApp/Views/VehicleOverviewView.swift`
-- `/Users/carlos/Documents/New project/CarCareApp/CarCareApp/Views/VehicleRowView.swift`
+- `APP_STORE_LAUNCH_CHECKLIST.md`
+- `APP_STORE_METADATA_DRAFT.md`
+- `APP_STORE_SCREENSHOT_PLAN.md`
+- `DEVICE_QA_CHECKLIST.md`
+- `SECURITY_PROVIDER_STORAGE_NOTES.md`
+- `CarCareApp/Models/Vehicle+CoreDataProperties.swift`
+- `CarCareApp/Services/ManufacturerScheduleSync.swift`
+- `CarCareApp/Services/SecureKeychainService.swift`
+- `CarCareApp/Views/GarageView.swift`
+- `CarCareApp/Views/MaintenanceLogView.swift`
+- `CarCareApp/Views/PartsView.swift`
+- `CarCareApp/Views/RemindersView.swift`
+- `CarCareApp/Views/VehicleInfoView.swift`
+- `CarCareApp/Views/VehicleOverviewView.swift`
+- `CarCareApp/Views/VehicleRowView.swift`
 
 ## Regressions Found
 - No blocking regression found in the reviewed working tree.

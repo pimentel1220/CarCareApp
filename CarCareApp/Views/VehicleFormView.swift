@@ -231,7 +231,7 @@ struct VehicleFormView: View {
                     if let trim = decoded.trim { self.trim = trim }
                     if let engine = decoded.engine { self.engine = engine }
                     self.isDecodingVIN = false
-                    AppFeedbackCenter.shared.show("VIN decoded")
+                    AppFeedbackCenter.shared.show("Vehicle details updated from VIN")
                 }
             } catch {
                 await MainActor.run {

@@ -106,7 +106,7 @@ struct VehicleInfoView: View {
             }
 
             Section("Backups") {
-                Text("Use a backup if you want an extra copy of this vehicle's history. Backups include your records and optional photos, but never provider credentials.")
+                Text("Use a backup if you want an extra copy of this vehicle's history. Backups include your records and optional photos, but never saved sign-in details.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Button("Save Backup Copy") {
@@ -147,13 +147,13 @@ struct VehicleInfoView: View {
                             scheduleProviderSettings.applyCarMDPreset()
                             scheduleProviderSettings.save()
                             providerConnectionStatus = nil
-                            AppFeedbackCenter.shared.show("CarMD preset applied")
+                            AppFeedbackCenter.shared.show("Schedule sync preset updated")
                         },
                         onClearStoredCredentials: {
                             scheduleProviderSettings.clearStoredCredentials()
                             scheduleProviderSettings.save()
                             providerConnectionStatus = nil
-                            AppFeedbackCenter.shared.show("Stored credentials cleared")
+                            AppFeedbackCenter.shared.show("Stored sign-in details cleared")
                         },
                         onApplyStyle: { showApplyConfirm = true },
                         onUndoStyle: { showUndoConfirm = true },
@@ -164,7 +164,7 @@ struct VehicleInfoView: View {
                 } label: {
                     Label("Open Advanced Settings", systemImage: "gearshape.2")
                 }
-                Text("These options are only needed if you want backup automation or provider-based schedule syncing.")
+                Text("These options are only needed if you want backup automation or connected schedule tools.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -250,7 +250,7 @@ struct VehicleInfoView: View {
             case .success:
                 recordLastBackupExportDate(Date())
                 recordBackupSnapshot()
-                AppFeedbackCenter.shared.show("Backup ready to save")
+                AppFeedbackCenter.shared.show("Backup file is ready")
             case .failure(let error):
                 AppErrorCenter.shared.message = userSafeBackupMessage(for: error, defaultMessage: "Backup export failed.")
             }
@@ -315,7 +315,7 @@ struct VehicleInfoView: View {
                     if let engine = decoded.engine { vehicle.engine = engine }
                     saveContext(successMessage: "Vehicle updated")
                     isDecodingVIN = false
-                    AppFeedbackCenter.shared.show("VIN decoded")
+                    AppFeedbackCenter.shared.show("Vehicle details updated from VIN")
                 }
             } catch {
                 await MainActor.run {

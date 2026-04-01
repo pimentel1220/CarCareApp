@@ -2,7 +2,7 @@
 
 ## Where Provider Credentials Are Stored
 Sensitive provider credentials are stored in iOS Keychain through:
-- `/Users/carlos/Documents/New project/CarCareApp/CarCareApp/Services/SecureKeychainService.swift`
+- `CarCareApp/Services/SecureKeychainService.swift`
 
 Provider credential keys:
 - `schedule.provider.authToken`
@@ -27,7 +27,7 @@ All of those flow through:
 - `partnerToken`
 
 and are saved to Keychain by:
-- `/Users/carlos/Documents/New project/CarCareApp/CarCareApp/Services/ManufacturerScheduleSync.swift`
+- `CarCareApp/Services/ManufacturerScheduleSync.swift`
 
 Legacy copies that may still exist in `UserDefaults` from older builds are migrated into Keychain during `ScheduleProviderSettings.load()` and then removed from `UserDefaults`.
 

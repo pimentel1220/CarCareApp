@@ -17,43 +17,43 @@
 ## Screenshot Scenes
 
 ### 1. Garage Home
-- Screen: `/Users/carlos/Documents/New project/CarCareApp/CarCareApp/Views/GarageView.swift`
+- Screen: `Garage`
 - Show: at least two vehicles, with one vehicle showing a reminder warning line
 - Caption: `Keep every vehicle in one place`
 - Format: iPhone portrait
 
 ### 2. Vehicle Overview Dashboard
-- Screen: `/Users/carlos/Documents/New project/CarCareApp/CarCareApp/Views/VehicleOverviewView.swift`
+- Screen: `Vehicle Overview`
 - Show: mileage, active reminders, service count, total spend, and recent activity
 - Caption: `See what needs attention at a glance`
 - Format: iPhone portrait
 
 ### 3. Maintenance History
-- Screen: `/Users/carlos/Documents/New project/CarCareApp/CarCareApp/Views/MaintenanceLogView.swift`
+- Screen: `Maintenance`
 - Show: multiple service entries plus the quick-add row
 - Caption: `Log service and build a clear history`
 - Format: iPhone portrait
 
 ### 4. Reminder Urgency
-- Screen: `/Users/carlos/Documents/New project/CarCareApp/CarCareApp/Views/RemindersView.swift`
+- Screen: `Reminders`
 - Show: one overdue reminder, one due-soon reminder, and one upcoming reminder
 - Caption: `Stay ahead of overdue and upcoming service`
 - Format: iPhone portrait
 
 ### 5. Service Record Detail
-- Screen: `/Users/carlos/Documents/New project/CarCareApp/CarCareApp/Views/ServiceLogFormView.swift`
+- Screen: `Service Detail`
 - Show: a completed service entry with notes, mileage, cost, and receipt photo
 - Caption: `Save notes, costs, and receipt photos`
 - Format: iPhone portrait
 
 ### 6. Parts Tracking
-- Screen: `/Users/carlos/Documents/New project/CarCareApp/CarCareApp/Views/PartsView.swift`
+- Screen: `Parts`
 - Show: several parts with linked service context and miles-since-replacement details
 - Caption: `Track parts and connect them to service`
 - Format: iPhone portrait
 
 ### 7. Backup Confidence
-- Screen: `/Users/carlos/Documents/New project/CarCareApp/CarCareApp/Views/VehicleInfoView.swift`
+- Screen: `Vehicle Info`
 - Show: Backups section with save and restore actions plus last backup date
 - Caption: `Keep a backup copy of your vehicle history`
 - Format: iPhone portrait

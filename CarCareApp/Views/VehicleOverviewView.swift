@@ -26,7 +26,7 @@ struct VehicleOverviewView: View {
                                 .foregroundStyle(.secondary)
 
                             if let vin = vehicle.vin, !vin.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                Text("VIN ready for schedule sync")
+                                Text("VIN added for quicker vehicle details")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
