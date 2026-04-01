@@ -8,6 +8,7 @@ struct PartReplacementFormView: View {
 
     @ObservedObject var vehicle: Vehicle
     var existingPart: PartReplacement?
+    var initialPartName: String? = nil
 
     @State private var partName = ""
     @State private var date = Date()
@@ -29,6 +30,21 @@ struct PartReplacementFormView: View {
                     DatePicker("Date", selection: $date, displayedComponents: .date)
                     TextField("Mileage", text: $mileage)
                         .keyboardType(.numbersAndPunctuation)
+
+                    HStack {
+                        Button("Use Current Mileage") {
+                            mileage = Formatters.mileageText(vehicle.latestKnownMileage)
+                        }
+                        .disabled(vehicle.latestKnownMileage <= 0)
+
+                        Spacer()
+
+                        Button("Use Linked Service") {
+                            applyLinkedServiceDefaults(force: true)
+                        }
+                        .disabled(vehicle.log(with: selectedServiceLogID) == nil)
+                    }
+                    .font(.caption)
                 }
 
                 Section("Reference Link") {
@@ -42,6 +58,13 @@ struct PartReplacementFormView: View {
                         fetchMetadata()
                     }
                     .disabled(isFetchingMetadata || normalizedURL(from: sourceURLText) == nil)
+
+                    if let sourceURL = normalizedURL(from: sourceURLText) {
+                        Link(destination: sourceURL) {
+                            Label("Open Link", systemImage: "safari")
+                        }
+                        .font(.caption)
+                    }
                 }
 
                 Section("Linked Service") {
@@ -93,6 +116,10 @@ struct PartReplacementFormView: View {
                 }
             }
             .onAppear(perform: loadExistingPart)
+            .onChange(of: selectedServiceLogID) { _ in
+                guard existingPart == nil else { return }
+                applyLinkedServiceDefaults()
+            }
         }
     }
 
@@ -116,6 +143,14 @@ struct PartReplacementFormView: View {
         } else if vehicle.latestKnownMileage > 0 {
             mileage = Formatters.mileageText(vehicle.latestKnownMileage)
             selectedServiceLogID = vehicle.sortedLogs.first?.id
+            if let initialPartName {
+                partName = initialPartName
+                applyRecommendedInterval()
+            }
+            applyLinkedServiceDefaults()
+        } else if let initialPartName {
+            partName = initialPartName
+            applyRecommendedInterval()
         }
     }
 
@@ -209,8 +244,28 @@ struct PartReplacementFormView: View {
             return
         }
         intervalMonths = recommendation.intervalMonths > 0 ? String(recommendation.intervalMonths) : ""
-        intervalMiles = recommendation.intervalMiles > 0 ? String(recommendation.intervalMiles) : ""
+        intervalMiles = recommendation.intervalMiles > 0 ? Formatters.mileageText(Double(recommendation.intervalMiles)) : ""
         AppFeedbackCenter.shared.show("Recommended interval applied")
+    }
+
+    private func applyLinkedServiceDefaults(force: Bool = false) {
+        guard let linkedService = vehicle.log(with: selectedServiceLogID) else { return }
+
+        if force || Formatters.parseMileage(mileage) == nil || (Formatters.parseMileage(mileage) ?? 0) <= 0 {
+            if linkedService.mileage > 0 {
+                mileage = Formatters.mileageText(linkedService.mileage)
+            }
+        }
+
+        if force || notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let existingURLNote = extractStoredURL(from: notes)
+            let note = "Installed with \(linkedService.title ?? "service") on \(linkedService.date.formatted(date: .abbreviated, time: .omitted))."
+            notes = mergedNotesWithURL(notes: note, url: existingURLNote)
+        }
+
+        if force {
+            date = linkedService.date
+        }
     }
 
     private func serviceLabel(for log: ServiceLog) -> String {

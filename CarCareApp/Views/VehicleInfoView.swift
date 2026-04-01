@@ -44,6 +44,12 @@ struct VehicleInfoView: View {
                     Text(vehicle.latestKnownMileage > 0 ? Formatters.mileageLabel(vehicle.latestKnownMileage) : "Not set")
                         .foregroundStyle(.secondary)
                 }
+                HStack {
+                    Text("Active Reminders")
+                    Spacer()
+                    Text("\(vehicle.activeReminders.count)")
+                        .foregroundStyle(.secondary)
+                }
                 Button("Edit Vehicle") {
                     showingEdit = true
                 }
@@ -80,106 +86,6 @@ struct VehicleInfoView: View {
                 }
             }
 
-            Section("Recommendation Style") {
-                Picker("Style", selection: $recommendationStyle) {
-                    ForEach(RecommendationStyle.allCases) { style in
-                        Text(style.title).tag(style)
-                    }
-                }
-                .pickerStyle(.segmented)
-
-                Text(recommendationStyle.summary)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Button(isSyncingManufacturerSchedule ? "Syncing Manufacturer Schedule..." : "Sync Manufacturer Schedule by VIN") {
-                    syncManufacturerSchedule()
-                }
-                .disabled(isSyncingManufacturerSchedule)
-
-                Picker("Schedule Source", selection: $scheduleProviderSettings.provider) {
-                    ForEach(ScheduleProviderType.allCases) { type in
-                        Text(type.title).tag(type)
-                    }
-                }
-                Button("Use CarMD Preset") {
-                    scheduleProviderSettings.applyCarMDPreset()
-                    scheduleProviderSettings.save()
-                    providerConnectionStatus = nil
-                    AppFeedbackCenter.shared.show("CarMD preset applied")
-                }
-
-                if scheduleProviderSettings.provider == .genericREST || scheduleProviderSettings.provider == .auto {
-                    TextField("Provider URL (use {vin})", text: $scheduleProviderSettings.endpointTemplate, axis: .vertical)
-                        .lineLimit(1...3)
-                    Picker("Auth", selection: $scheduleProviderSettings.authMode) {
-                        ForEach(ScheduleAuthMode.allCases) { mode in
-                            Text(mode.title).tag(mode)
-                        }
-                    }
-                    if scheduleProviderSettings.authMode == .bearer {
-                        SecureField("Bearer Token", text: $scheduleProviderSettings.authToken)
-                    }
-                    if scheduleProviderSettings.authMode == .header {
-                        TextField("Header Name", text: $scheduleProviderSettings.authHeaderName)
-                        SecureField("Header Value", text: $scheduleProviderSettings.authToken)
-                    }
-                    if scheduleProviderSettings.authMode == .queryParam {
-                        TextField("Query Key", text: $scheduleProviderSettings.authQueryKey)
-                        SecureField("Query Value", text: $scheduleProviderSettings.authToken)
-                    }
-                    if scheduleProviderSettings.authMode == .carScanDualHeader {
-                        SecureField("Authorization Header Value", text: $scheduleProviderSettings.authToken)
-                        SecureField("Partner-Token Header Value", text: $scheduleProviderSettings.partnerToken)
-                    }
-                    Text("Example: https://api.example.com/schedule?vin={vin}")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-
-                Button(isTestingScheduleProvider ? "Testing Provider..." : "Test Provider Connection") {
-                    testProviderConnection()
-                }
-                .disabled(isTestingScheduleProvider)
-
-                if let providerConnectionStatus {
-                    Text(providerStatusText(providerConnectionStatus))
-                        .font(.caption2)
-                        .foregroundStyle(providerStatusColor(providerConnectionStatus))
-                    Button("Copy Debug Details") {
-                        UIPasteboard.general.string = providerDebugDetails(providerConnectionStatus)
-                        AppFeedbackCenter.shared.show("Debug details copied")
-                    }
-                    .font(.caption2)
-                }
-
-                if let lastSynced = ManufacturerScheduleSync.lastSyncedAt(for: vehicle) {
-                    Text("Last manufacturer sync: \(lastSynced.formatted(date: .abbreviated, time: .shortened))")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-
-                if let lastApplied = lastStyleApplyDate {
-                    Text("Last style apply: \(lastApplied.formatted(date: .abbreviated, time: .shortened))")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-
-                Button("Apply New Style to Existing Active Reminders") {
-                    showApplyConfirm = true
-                }
-
-                Button("Undo Last Style Re-Apply") {
-                    showUndoConfirm = true
-                }
-                .disabled(!hasUndoSnapshot)
-
-                Button("Clear Style History", role: .destructive) {
-                    clearStyleHistory()
-                }
-                .disabled(!hasStyleHistory)
-            }
-
             Section("Actions") {
                 Button("Edit Vehicle") {
                     showingEdit = true
@@ -188,36 +94,73 @@ struct VehicleInfoView: View {
                     decodeVIN()
                 }
                 .disabled(isDecodingVIN)
+                Text("VIN decoding sends the VIN to a secure external lookup service to fill vehicle details.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
 
-            Section("Data Backup") {
-                Button("Export Vehicle Backup (JSON)") {
+            Section("Backups") {
+                Text("Backups include ownership records and optional photos. Provider credentials and developer settings are never exported.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button("Export Vehicle Backup") {
                     exportBackup()
                 }
-                Button("Import Vehicle Backup (JSON)") {
+                Button("Import Vehicle Backup") {
                     showBackupImporter = true
                 }
-                Toggle("Replace Existing Data on Import", isOn: $replaceExistingOnImport)
-                    .font(.caption)
-                Picker("Auto Backup", selection: $autoBackupMode) {
-                    ForEach(AutoBackupMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                if autoBackupMode == .changes {
-                    Stepper(
-                        "Prompt every \(autoBackupChangeThreshold) new records",
-                        value: $autoBackupChangeThreshold,
-                        in: 5...100,
-                        step: 5
-                    )
-                    .font(.caption)
-                }
-                if let lastBackup = lastBackupExportDate {
-                    Text("Last backup exported: \(lastBackup.formatted(date: .abbreviated, time: .shortened))")
+                if let lastBackupExportDate {
+                    Text("Last backup exported: \(lastBackupExportDate.formatted(date: .abbreviated, time: .shortened))")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
+            }
+
+            Section("Developer Settings") {
+                NavigationLink {
+                    VehicleDeveloperSettingsView(
+                        vehicle: vehicle,
+                        recommendationStyle: $recommendationStyle,
+                        autoBackupMode: $autoBackupMode,
+                        autoBackupChangeThreshold: $autoBackupChangeThreshold,
+                        replaceExistingOnImport: $replaceExistingOnImport,
+                        isSyncingManufacturerSchedule: $isSyncingManufacturerSchedule,
+                        isTestingScheduleProvider: $isTestingScheduleProvider,
+                        providerConnectionStatus: $providerConnectionStatus,
+                        scheduleProviderSettings: $scheduleProviderSettings,
+                        hasUndoSnapshot: hasUndoSnapshot,
+                        hasStyleHistory: hasStyleHistory,
+                        activeReminderCountForStyleApply: activeReminderCountForStyleApply,
+                        undoSnapshotReminderCount: undoSnapshotReminderCount,
+                        lastStyleApplyDate: lastStyleApplyDate,
+                        lastManufacturerSyncDate: ManufacturerScheduleSync.lastSyncedAt(for: vehicle),
+                        lastBackupExportDate: lastBackupExportDate,
+                        onSyncManufacturerSchedule: syncManufacturerSchedule,
+                        onTestProviderConnection: testProviderConnection,
+                        onUseCarMDPreset: {
+                            scheduleProviderSettings.applyCarMDPreset()
+                            scheduleProviderSettings.save()
+                            providerConnectionStatus = nil
+                            AppFeedbackCenter.shared.show("CarMD preset applied")
+                        },
+                        onClearStoredCredentials: {
+                            scheduleProviderSettings.clearStoredCredentials()
+                            scheduleProviderSettings.save()
+                            providerConnectionStatus = nil
+                            AppFeedbackCenter.shared.show("Stored credentials cleared")
+                        },
+                        onApplyStyle: { showApplyConfirm = true },
+                        onUndoStyle: { showUndoConfirm = true },
+                        onClearStyleHistory: clearStyleHistory,
+                        providerStatusText: providerStatusText,
+                        providerStatusColor: providerStatusColor
+                    )
+                } label: {
+                    Label("Open Developer Settings", systemImage: "gearshape.2")
+                }
+                Text("Advanced sync, provider setup, replace-import mode, style tools, and auto-backup live here.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .toolbar {
@@ -303,7 +246,7 @@ struct VehicleInfoView: View {
                 recordBackupSnapshot()
                 AppFeedbackCenter.shared.show("Backup exported")
             case .failure(let error):
-                AppErrorCenter.shared.message = error.localizedDescription
+                AppErrorCenter.shared.message = userSafeBackupMessage(for: error, defaultMessage: "Backup export failed.")
             }
         }
         .fileImporter(
@@ -339,7 +282,7 @@ struct VehicleInfoView: View {
             try viewContext.save()
             AppFeedbackCenter.shared.show(successMessage)
         } catch {
-            AppErrorCenter.shared.message = error.localizedDescription
+            AppErrorCenter.shared.message = "Could not save changes right now."
         }
     }
 
@@ -371,7 +314,7 @@ struct VehicleInfoView: View {
             } catch {
                 await MainActor.run {
                     isDecodingVIN = false
-                    AppErrorCenter.shared.message = error.localizedDescription
+                    AppErrorCenter.shared.message = userSafeVINMessage(for: error)
                 }
             }
         }
@@ -390,7 +333,7 @@ struct VehicleInfoView: View {
             } catch {
                 await MainActor.run {
                     isSyncingManufacturerSchedule = false
-                    AppErrorCenter.shared.message = error.localizedDescription
+                    AppErrorCenter.shared.message = ManufacturerScheduleSync.userSafeMessage(for: error)
                 }
             }
         }
@@ -432,37 +375,6 @@ struct VehicleInfoView: View {
         case .failed:
             return .secondary
         }
-    }
-
-    private func providerDebugDetails(_ status: ProviderConnectionStatus) -> String {
-        let vin = VINDecoder.sanitize(vehicle.vin ?? "")
-        let endpoint = scheduleProviderSettings.endpointTemplate.trimmingCharacters(in: .whitespacesAndNewlines)
-        let endpointPreview = endpoint.isEmpty ? "(empty)" : endpoint
-        let authTokenSet = !scheduleProviderSettings.authToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        let partnerTokenSet = !scheduleProviderSettings.partnerToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-
-        let statusLine: String
-        switch status {
-        case .connected(let message):
-            statusLine = "Connected: \(message)"
-        case .authFailed(let message):
-            statusLine = "Auth Failed: \(message)"
-        case .invalidResponse(let message):
-            statusLine = "Invalid Response: \(message)"
-        case .failed(let message):
-            statusLine = "Connection Failed: \(message)"
-        }
-
-        return """
-        Provider Status: \(statusLine)
-        Provider Type: \(scheduleProviderSettings.provider.rawValue)
-        Auth Mode: \(scheduleProviderSettings.authMode.rawValue)
-        Endpoint: \(endpointPreview)
-        Auth Token Set: \(authTokenSet)
-        Partner Token Set: \(partnerTokenSet)
-        VIN Length: \(vin.count)
-        Timestamp: \(Date().formatted(date: .abbreviated, time: .standard))
-        """
     }
 
     private func applyStyleToActiveReminders() {
@@ -679,10 +591,7 @@ struct VehicleInfoView: View {
     }
 
     private var backupFilename: String {
-        let cleanedName = vehicle.displayName
-            .replacingOccurrences(of: " ", with: "-")
-            .replacingOccurrences(of: "/", with: "-")
-        return "\(cleanedName)-backup-\(backupTimestamp())"
+        "carcare-backup-\(backupTimestamp())"
     }
 
     private func backupTimestamp() -> String {
@@ -755,14 +664,14 @@ struct VehicleInfoView: View {
             backupDocument = VehicleBackupDocument(data: data)
             showBackupExporter = true
         } catch {
-            AppErrorCenter.shared.message = error.localizedDescription
+            AppErrorCenter.shared.message = userSafeBackupMessage(for: error, defaultMessage: "Backup export failed.")
         }
     }
 
     private func handleImportResult(_ result: Result<[URL], Error>) {
         switch result {
         case .failure(let error):
-            AppErrorCenter.shared.message = error.localizedDescription
+            AppErrorCenter.shared.message = userSafeBackupMessage(for: error, defaultMessage: "Backup import failed.")
         case .success(let urls):
             guard let url = urls.first else { return }
             importBackup(from: url)
@@ -784,7 +693,7 @@ struct VehicleInfoView: View {
             pendingImportPayload = payload
             showImportConfirm = true
         } catch {
-            AppErrorCenter.shared.message = error.localizedDescription
+            AppErrorCenter.shared.message = userSafeBackupMessage(for: error, defaultMessage: "Backup import failed.")
         }
     }
 
@@ -801,7 +710,10 @@ struct VehicleInfoView: View {
             pendingImportPayload = nil
             saveContext(successMessage: "Imported \(summary.logs) service(s), \(summary.reminders) reminder(s), \(summary.parts) part(s)")
         } catch {
-            AppErrorCenter.shared.message = error.localizedDescription
+            viewContext.rollback()
+            pendingImportData = nil
+            pendingImportPayload = nil
+            AppErrorCenter.shared.message = userSafeBackupMessage(for: error, defaultMessage: "Backup import failed.")
         }
     }
 
@@ -836,6 +748,20 @@ struct VehicleInfoView: View {
 
     private var currentPartCount: Int {
         vehicle.sortedParts.count
+    }
+
+    private func userSafeBackupMessage(for error: Error, defaultMessage: String) -> String {
+        if let backupError = error as? VehicleBackupError {
+            return backupError.localizedDescription
+        }
+        return defaultMessage
+    }
+
+    private func userSafeVINMessage(for error: Error) -> String {
+        if let vinError = error as? VINDecodeError {
+            return vinError.localizedDescription
+        }
+        return "VIN decode failed. Please try again in a moment."
     }
 }
 
@@ -898,6 +824,188 @@ private enum AutoBackupMode: String, CaseIterable, Identifiable {
     }
 }
 
+private struct VehicleDeveloperSettingsView: View {
+    @ObservedObject var vehicle: Vehicle
+    @Binding var recommendationStyle: RecommendationStyle
+    @Binding var autoBackupMode: AutoBackupMode
+    @Binding var autoBackupChangeThreshold: Int
+    @Binding var replaceExistingOnImport: Bool
+    @Binding var isSyncingManufacturerSchedule: Bool
+    @Binding var isTestingScheduleProvider: Bool
+    @Binding var providerConnectionStatus: ProviderConnectionStatus?
+    @Binding var scheduleProviderSettings: ScheduleProviderSettings
+
+    let hasUndoSnapshot: Bool
+    let hasStyleHistory: Bool
+    let activeReminderCountForStyleApply: Int
+    let undoSnapshotReminderCount: Int
+    let lastStyleApplyDate: Date?
+    let lastManufacturerSyncDate: Date?
+    let lastBackupExportDate: Date?
+    let onSyncManufacturerSchedule: () -> Void
+    let onTestProviderConnection: () -> Void
+    let onUseCarMDPreset: () -> Void
+    let onClearStoredCredentials: () -> Void
+    let onApplyStyle: () -> Void
+    let onUndoStyle: () -> Void
+    let onClearStyleHistory: () -> Void
+    let providerStatusText: (ProviderConnectionStatus) -> String
+    let providerStatusColor: (ProviderConnectionStatus) -> Color
+
+    var body: some View {
+        List {
+            Section("Recommendation Style") {
+                Picker("Style", selection: $recommendationStyle) {
+                    ForEach(RecommendationStyle.allCases) { style in
+                        Text(style.title).tag(style)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Text(recommendationStyle.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Button("Apply New Style to Existing Active Reminders") {
+                    onApplyStyle()
+                }
+
+                Text("Will affect \(activeReminderCountForStyleApply) active reminder(s).")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+
+                Button("Undo Last Style Re-Apply") {
+                    onUndoStyle()
+                }
+                .disabled(!hasUndoSnapshot)
+
+                Text("Undo snapshot covers \(undoSnapshotReminderCount) reminder(s).")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+
+                Button("Clear Style History", role: .destructive) {
+                    onClearStyleHistory()
+                }
+                .disabled(!hasStyleHistory)
+
+                if let lastStyleApplyDate {
+                    Text("Last style apply: \(lastStyleApplyDate.formatted(date: .abbreviated, time: .shortened))")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section("Manufacturer Schedule") {
+                Button(isSyncingManufacturerSchedule ? "Syncing Manufacturer Schedule..." : "Sync Manufacturer Schedule by VIN") {
+                    onSyncManufacturerSchedule()
+                }
+                .disabled(isSyncingManufacturerSchedule)
+
+                if let lastManufacturerSyncDate {
+                    Text("Last manufacturer sync: \(lastManufacturerSyncDate.formatted(date: .abbreviated, time: .shortened))")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section("Schedule Provider") {
+                Text("Credentials are stored locally on this device using Keychain.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("Only HTTPS endpoints are allowed for provider sync and testing.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+
+                Picker("Schedule Source", selection: $scheduleProviderSettings.provider) {
+                    ForEach(ScheduleProviderType.allCases) { type in
+                        Text(type.title).tag(type)
+                    }
+                }
+
+                Button("Use CarMD Preset") {
+                    onUseCarMDPreset()
+                }
+
+                Button("Clear Stored Credentials", role: .destructive) {
+                    onClearStoredCredentials()
+                }
+                .disabled(
+                    scheduleProviderSettings.authToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+                    scheduleProviderSettings.partnerToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                )
+
+                if scheduleProviderSettings.provider == .genericREST || scheduleProviderSettings.provider == .auto {
+                    TextField("Provider URL (use {vin})", text: $scheduleProviderSettings.endpointTemplate, axis: .vertical)
+                        .lineLimit(1...3)
+                    Picker("Auth", selection: $scheduleProviderSettings.authMode) {
+                        ForEach(ScheduleAuthMode.allCases) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    }
+                    if scheduleProviderSettings.authMode == .bearer {
+                        SecureField("Bearer Token", text: $scheduleProviderSettings.authToken)
+                    }
+                    if scheduleProviderSettings.authMode == .header {
+                        TextField("Header Name", text: $scheduleProviderSettings.authHeaderName)
+                        SecureField("Header Value", text: $scheduleProviderSettings.authToken)
+                    }
+                    if scheduleProviderSettings.authMode == .queryParam {
+                        TextField("Query Key", text: $scheduleProviderSettings.authQueryKey)
+                        SecureField("Query Value", text: $scheduleProviderSettings.authToken)
+                    }
+                    if scheduleProviderSettings.authMode == .carScanDualHeader {
+                        SecureField("Authorization Header Value", text: $scheduleProviderSettings.authToken)
+                        SecureField("Partner-Token Header Value", text: $scheduleProviderSettings.partnerToken)
+                    }
+                    Text("Example: https://api.example.com/schedule?vin={vin}")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                Button(isTestingScheduleProvider ? "Testing Provider..." : "Test Provider Connection") {
+                    onTestProviderConnection()
+                }
+                .disabled(isTestingScheduleProvider)
+
+                if let providerConnectionStatus {
+                    Text(providerStatusText(providerConnectionStatus))
+                        .font(.caption2)
+                        .foregroundStyle(providerStatusColor(providerConnectionStatus))
+                }
+            }
+
+            Section("Import & Auto Backup") {
+                Text("Normal backup export and import live on the main Info screen. Replace mode is kept here because it is destructive.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Toggle("Replace Existing Data on Import", isOn: $replaceExistingOnImport)
+                    .font(.caption)
+                Picker("Auto Backup", selection: $autoBackupMode) {
+                    ForEach(AutoBackupMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                if autoBackupMode == .changes {
+                    Stepper(
+                        "Prompt every \(autoBackupChangeThreshold) new records",
+                        value: $autoBackupChangeThreshold,
+                        in: 5...100,
+                        step: 5
+                    )
+                    .font(.caption)
+                }
+                if let lastBackupExportDate {
+                    Text("Last backup exported: \(lastBackupExportDate.formatted(date: .abbreviated, time: .shortened))")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .navigationTitle("Developer Settings")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
 private struct InfoRow: View {
     let label: String
     let value: String?
@@ -923,13 +1031,36 @@ private struct VehicleBackupDocument: FileDocument {
 
     init(configuration: ReadConfiguration) throws {
         guard let data = configuration.file.regularFileContents else {
-            throw CocoaError(.fileReadCorruptFile)
+            throw VehicleBackupError.invalidPayload
         }
         self.data = data
     }
 
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
         FileWrapper(regularFileWithContents: data)
+    }
+}
+
+private enum VehicleBackupError: LocalizedError {
+    case invalidPayload
+    case unsupportedVersion(Int)
+    case fileTooLarge
+    case tooManyRecords
+    case corruptPhotos
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidPayload:
+            return "This backup file is invalid or corrupted."
+        case .unsupportedVersion(let version):
+            return "This backup file uses unsupported version \(version)."
+        case .fileTooLarge:
+            return "This backup file is too large to import safely on-device."
+        case .tooManyRecords:
+            return "This backup file contains too many records to import safely."
+        case .corruptPhotos:
+            return "One or more backup photos could not be processed safely."
+        }
     }
 }
 
@@ -940,18 +1071,33 @@ private enum VehicleBackupCodec {
         let parts: Int
     }
 
+    private static let supportedVersions: ClosedRange<Int> = 1...2
+    private static let maxBackupBytes = 25 * 1024 * 1024
+    private static let maxTotalRecords = 5000
+    private static let maxImageBytes = 5 * 1024 * 1024
+
     static func exportData(from vehicle: Vehicle) throws -> Data {
-        let payload = VehicleBackupPayload(vehicle: vehicle)
+        let payload = try VehicleBackupPayload(vehicle: vehicle)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
-        return try encoder.encode(payload)
+        let data = try encoder.encode(payload)
+        guard data.count <= maxBackupBytes else {
+            throw VehicleBackupError.fileTooLarge
+        }
+        return data
     }
 
     static func decodePayload(_ data: Data) throws -> VehicleBackupPayload {
+        guard data.count <= maxBackupBytes else {
+            throw VehicleBackupError.fileTooLarge
+        }
+
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(VehicleBackupPayload.self, from: data)
+        let payload = try decoder.decode(VehicleBackupPayload.self, from: data)
+        try validate(payload)
+        return payload
     }
 
     static func importData(
@@ -960,15 +1106,13 @@ private enum VehicleBackupCodec {
         context: NSManagedObjectContext,
         replaceExisting: Bool
     ) throws -> ImportSummary {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let payload = try decoder.decode(VehicleBackupPayload.self, from: data)
+        let payload = try decodePayload(data)
 
         if replaceExisting {
             vehicle.sortedLogs.forEach(context.delete)
-            vehicle.sortedReminders.forEach { reminder in
-                NotificationManager.shared.removeNotification(for: reminder)
-                context.delete(reminder)
+            vehicle.sortedReminders.forEach {
+                NotificationManager.shared.removeNotification(for: $0)
+                context.delete($0)
             }
             vehicle.sortedParts.forEach(context.delete)
         }
@@ -996,7 +1140,7 @@ private enum VehicleBackupCodec {
             log.shop = item.shop
             log.details = item.details
             log.photoData = item.photoData
-            log.createdAt = item.createdAt
+            if log.createdAt.timeIntervalSince1970 <= 0 { log.createdAt = item.date }
             log.vehicle = vehicle
         }
 
@@ -1013,7 +1157,7 @@ private enum VehicleBackupCodec {
             reminder.repeatIntervalMonths = item.repeatIntervalMonths
             reminder.repeatIntervalMiles = item.repeatIntervalMiles
             reminder.isCompleted = item.isCompleted
-            reminder.notificationID = item.notificationID
+            reminder.notificationID = nil
             reminder.linkedServiceLogID = item.linkedServiceLogID
             reminder.vehicle = vehicle
         }
@@ -1029,15 +1173,40 @@ private enum VehicleBackupCodec {
             part.intervalMonths = item.intervalMonths
             part.intervalMiles = item.intervalMiles
             part.notes = item.notes
-            part.createdAt = item.createdAt
+            if part.createdAt.timeIntervalSince1970 <= 0 { part.createdAt = item.date }
             part.vehicle = vehicle
         }
+
+        vehicle.sortedReminders
+            .filter { !$0.isCompleted }
+            .forEach { NotificationManager.shared.scheduleNotification(for: $0, vehicleName: vehicle.displayName) }
 
         return ImportSummary(
             logs: payload.logs.count,
             reminders: payload.reminders.count,
             parts: payload.parts.count
         )
+    }
+
+    private static func validate(_ payload: VehicleBackupPayload) throws {
+        guard supportedVersions.contains(payload.version) else {
+            throw VehicleBackupError.unsupportedVersion(payload.version)
+        }
+        let totalRecords = payload.logs.count + payload.reminders.count + payload.parts.count
+        guard totalRecords <= maxTotalRecords else {
+            throw VehicleBackupError.tooManyRecords
+        }
+        guard imageDataIsSafe(payload.vehicle.photoData) else {
+            throw VehicleBackupError.corruptPhotos
+        }
+        guard payload.logs.allSatisfy({ imageDataIsSafe($0.photoData) }) else {
+            throw VehicleBackupError.corruptPhotos
+        }
+    }
+
+    private static func imageDataIsSafe(_ data: Data?) -> Bool {
+        guard let data else { return true }
+        return data.count <= maxImageBytes
     }
 }
 
@@ -1049,64 +1218,13 @@ private struct VehicleBackupPayload: Codable {
     let reminders: [ReminderRecord]
     let parts: [PartRecord]
 
-    init(vehicle: Vehicle) {
-        version = 1
+    init(vehicle: Vehicle) throws {
+        version = 2
         exportedAt = Date()
-        self.vehicle = VehicleRecord(
-            nickname: vehicle.nickname,
-            make: vehicle.make,
-            model: vehicle.model,
-            year: vehicle.year,
-            trim: vehicle.trim,
-            engine: vehicle.engine,
-            vin: vehicle.vin,
-            plate: vehicle.plate,
-            notes: vehicle.notes,
-            photoData: vehicle.photoData,
-            currentMileage: vehicle.currentMileage
-        )
-        logs = vehicle.sortedLogs.map {
-            ServiceLogRecord(
-                id: $0.id,
-                title: $0.title,
-                date: $0.date,
-                mileage: $0.mileage,
-                cost: $0.cost,
-                shop: $0.shop,
-                details: $0.details,
-                photoData: $0.photoData,
-                createdAt: $0.createdAt
-            )
-        }
-        reminders = vehicle.sortedReminders.map {
-            ReminderRecord(
-                id: $0.id,
-                title: $0.title,
-                details: $0.details,
-                dueDate: $0.dueDate,
-                dueMileage: $0.dueMileage,
-                lastServiceDate: $0.lastServiceDate,
-                lastServiceMileage: $0.lastServiceMileage,
-                repeatIntervalMonths: $0.repeatIntervalMonths,
-                repeatIntervalMiles: $0.repeatIntervalMiles,
-                isCompleted: $0.isCompleted,
-                notificationID: $0.notificationID,
-                linkedServiceLogID: $0.linkedServiceLogID
-            )
-        }
-        parts = vehicle.sortedParts.map {
-            PartRecord(
-                id: $0.id,
-                partName: $0.partName,
-                linkedServiceLogID: $0.linkedServiceLogID,
-                date: $0.date,
-                mileage: $0.mileage,
-                intervalMonths: $0.intervalMonths,
-                intervalMiles: $0.intervalMiles,
-                notes: $0.notes,
-                createdAt: $0.createdAt
-            )
-        }
+        self.vehicle = try VehicleRecord(vehicle: vehicle)
+        logs = try vehicle.sortedLogs.map { try ServiceLogRecord(log: $0) }
+        reminders = vehicle.sortedReminders.map { ReminderRecord(reminder: $0) }
+        parts = vehicle.sortedParts.map { PartRecord(part: $0) }
     }
 }
 
@@ -1122,6 +1240,20 @@ private struct VehicleRecord: Codable {
     let notes: String?
     let photoData: Data?
     let currentMileage: Double
+
+    init(vehicle: Vehicle) throws {
+        nickname = vehicle.nickname
+        make = vehicle.make
+        model = vehicle.model
+        year = vehicle.year
+        trim = vehicle.trim
+        engine = vehicle.engine
+        vin = vehicle.vin
+        plate = vehicle.plate
+        notes = vehicle.notes
+        photoData = try BackupImageSanitizer.sanitizedImageData(from: vehicle.photoData)
+        currentMileage = vehicle.currentMileage
+    }
 }
 
 private extension VehicleRecord {
@@ -1145,7 +1277,17 @@ private struct ServiceLogRecord: Codable {
     let shop: String?
     let details: String?
     let photoData: Data?
-    let createdAt: Date
+
+    init(log: ServiceLog) throws {
+        id = log.id
+        title = log.title
+        date = log.date
+        mileage = log.mileage
+        cost = log.cost
+        shop = log.shop
+        details = log.details
+        photoData = try BackupImageSanitizer.sanitizedImageData(from: log.photoData)
+    }
 }
 
 private struct ReminderRecord: Codable {
@@ -1159,8 +1301,21 @@ private struct ReminderRecord: Codable {
     let repeatIntervalMonths: Int16
     let repeatIntervalMiles: Double
     let isCompleted: Bool
-    let notificationID: String?
     let linkedServiceLogID: UUID?
+
+    init(reminder: Reminder) {
+        id = reminder.id
+        title = reminder.title
+        details = reminder.details
+        dueDate = reminder.dueDate
+        dueMileage = reminder.dueMileage
+        lastServiceDate = reminder.lastServiceDate
+        lastServiceMileage = reminder.lastServiceMileage
+        repeatIntervalMonths = reminder.repeatIntervalMonths
+        repeatIntervalMiles = reminder.repeatIntervalMiles
+        isCompleted = reminder.isCompleted
+        linkedServiceLogID = reminder.linkedServiceLogID
+    }
 }
 
 private struct PartRecord: Codable {
@@ -1172,5 +1327,49 @@ private struct PartRecord: Codable {
     let intervalMonths: Int16
     let intervalMiles: Double
     let notes: String?
-    let createdAt: Date
+
+    init(part: PartReplacement) {
+        id = part.id
+        partName = part.partName
+        linkedServiceLogID = part.linkedServiceLogID
+        date = part.date
+        mileage = part.mileage
+        intervalMonths = part.intervalMonths
+        intervalMiles = part.intervalMiles
+        notes = part.notes
+    }
+}
+
+private enum BackupImageSanitizer {
+    private static let maxDimension: CGFloat = 1600
+    private static let compressionQuality: CGFloat = 0.75
+    private static let maxBytes = 5 * 1024 * 1024
+
+    static func sanitizedImageData(from data: Data?) throws -> Data? {
+        guard let data else { return nil }
+        if data.count <= maxBytes, UIImage(data: data) == nil {
+            return data
+        }
+        guard let image = UIImage(data: data) else {
+            throw VehicleBackupError.corruptPhotos
+        }
+
+        let resized = resizedImage(from: image)
+        guard let jpegData = resized.jpegData(compressionQuality: compressionQuality), jpegData.count <= maxBytes else {
+            throw VehicleBackupError.fileTooLarge
+        }
+        return jpegData
+    }
+
+    private static func resizedImage(from image: UIImage) -> UIImage {
+        let size = image.size
+        let largestSide = max(size.width, size.height)
+        guard largestSide > maxDimension else { return image }
+        let scale = maxDimension / largestSide
+        let targetSize = CGSize(width: size.width * scale, height: size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: targetSize)
+        return renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: targetSize))
+        }
+    }
 }

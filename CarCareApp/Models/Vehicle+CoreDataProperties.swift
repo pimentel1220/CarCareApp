@@ -65,4 +65,53 @@ extension Vehicle {
         guard let id else { return nil }
         return sortedLogs.first { $0.id == id }
     }
+
+    var activeReminders: [Reminder] {
+        sortedReminders.filter { !$0.isCompleted }
+    }
+
+    var recentLogs: [ServiceLog] {
+        Array(sortedLogs.prefix(5))
+    }
+
+    var recentParts: [PartReplacement] {
+        Array(sortedParts.prefix(5))
+    }
+
+    var upcomingReminders: [Reminder] {
+        activeReminders.sorted { lhs, rhs in
+            let lhsScore = reminderPriority(lhs)
+            let rhsScore = reminderPriority(rhs)
+            if lhsScore == rhsScore {
+                return (lhs.dueDate ?? .distantFuture) < (rhs.dueDate ?? .distantFuture)
+            }
+            return lhsScore < rhsScore
+        }
+    }
+
+    var totalServiceSpend: Double {
+        sortedLogs.reduce(0) { $0 + $1.cost }
+    }
+
+    var totalServiceCount: Int {
+        sortedLogs.count
+    }
+
+    var totalPartCount: Int {
+        sortedParts.count
+    }
+
+    private func reminderPriority(_ reminder: Reminder) -> Int {
+        let currentMileage = latestKnownMileage
+        if let dueDate = reminder.dueDate, dueDate <= Date() {
+            return 0
+        }
+        if reminder.dueMileage > 0, currentMileage > 0, reminder.dueMileage <= currentMileage {
+            return 0
+        }
+        if reminder.dueDate != nil || reminder.dueMileage > 0 {
+            return 1
+        }
+        return 2
+    }
 }

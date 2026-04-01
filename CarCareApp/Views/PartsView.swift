@@ -7,13 +7,31 @@ struct PartsView: View {
 
     @State private var showingAddPart = false
     @State private var editingPart: PartReplacement?
+    @State private var draftPartName = "Oil Filter"
 
     var body: some View {
         List {
+            Section("Quick Add") {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(quickAddParts, id: \.self) { part in
+                            Button(part) {
+                                draftPartName = part
+                                showingAddPart = true
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+            }
+
             if vehicle.sortedParts.isEmpty {
                 VStack(spacing: 16) {
                     EmptyStateView("No Parts", systemImage: "gearshape", message: "Track replaced parts and intervals.")
                     Button("Add Part") {
+                        draftPartName = "Oil Filter"
                         showingAddPart = true
                     }
                     .buttonStyle(.borderedProminent)
@@ -34,6 +52,7 @@ struct PartsView: View {
                         Text("Parts")
                         Spacer()
                         Button("Add Part") {
+                            draftPartName = "Oil Filter"
                             showingAddPart = true
                         }
                         .font(.subheadline)
@@ -45,6 +64,7 @@ struct PartsView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
+                    draftPartName = "Oil Filter"
                     showingAddPart = true
                 } label: {
                     Label("Add Part", systemImage: "plus")
@@ -52,7 +72,7 @@ struct PartsView: View {
             }
         }
         .sheet(isPresented: $showingAddPart) {
-            PartReplacementFormView(vehicle: vehicle)
+            PartReplacementFormView(vehicle: vehicle, initialPartName: draftPartName)
         }
         .sheet(item: $editingPart) { part in
             PartReplacementFormView(vehicle: vehicle, existingPart: part)
@@ -73,6 +93,17 @@ struct PartsView: View {
         } catch {
             AppErrorCenter.shared.message = error.localizedDescription
         }
+    }
+
+    private var quickAddParts: [String] {
+        [
+            "Oil Filter",
+            "Battery",
+            "Brake Pads",
+            "Engine Air Filter",
+            "Cabin Air Filter",
+            "Wiper Blades"
+        ]
     }
 }
 

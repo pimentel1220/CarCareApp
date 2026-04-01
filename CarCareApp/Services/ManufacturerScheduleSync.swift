@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 struct ManufacturerScheduleSyncResult {
     let templates: [ServiceTemplate]
@@ -70,12 +71,13 @@ struct ScheduleProviderSettings {
     static func load() -> ScheduleProviderSettings {
         let raw = UserDefaults.standard.string(forKey: Keys.provider) ?? ScheduleProviderType.auto.rawValue
         let authRaw = UserDefaults.standard.string(forKey: Keys.authMode) ?? ScheduleAuthMode.none.rawValue
+        migrateLegacySecretsIfNeeded()
         return ScheduleProviderSettings(
             provider: ScheduleProviderType(rawValue: raw) ?? .auto,
             endpointTemplate: UserDefaults.standard.string(forKey: Keys.endpointTemplate) ?? "",
             authMode: ScheduleAuthMode(rawValue: authRaw) ?? .none,
-            authToken: UserDefaults.standard.string(forKey: Keys.authToken) ?? "",
-            partnerToken: UserDefaults.standard.string(forKey: Keys.partnerToken) ?? "",
+            authToken: SecureKeychainService.shared.string(for: Keys.authToken) ?? "",
+            partnerToken: SecureKeychainService.shared.string(for: Keys.partnerToken) ?? "",
             authHeaderName: UserDefaults.standard.string(forKey: Keys.authHeaderName) ?? "X-API-Key",
             authQueryKey: UserDefaults.standard.string(forKey: Keys.authQueryKey) ?? "api_key"
         )
@@ -85,10 +87,17 @@ struct ScheduleProviderSettings {
         UserDefaults.standard.set(provider.rawValue, forKey: Keys.provider)
         UserDefaults.standard.set(endpointTemplate, forKey: Keys.endpointTemplate)
         UserDefaults.standard.set(authMode.rawValue, forKey: Keys.authMode)
-        UserDefaults.standard.set(authToken, forKey: Keys.authToken)
-        UserDefaults.standard.set(partnerToken, forKey: Keys.partnerToken)
         UserDefaults.standard.set(authHeaderName, forKey: Keys.authHeaderName)
         UserDefaults.standard.set(authQueryKey, forKey: Keys.authQueryKey)
+        SecureKeychainService.shared.set(authToken.trimmingCharacters(in: .whitespacesAndNewlines), for: Keys.authToken)
+        SecureKeychainService.shared.set(partnerToken.trimmingCharacters(in: .whitespacesAndNewlines), for: Keys.partnerToken)
+    }
+
+    mutating func clearStoredCredentials() {
+        authToken = ""
+        partnerToken = ""
+        SecureKeychainService.shared.deleteValue(for: Keys.authToken)
+        SecureKeychainService.shared.deleteValue(for: Keys.partnerToken)
     }
 
     mutating func applyCarMDPreset() {
@@ -112,11 +121,30 @@ struct ScheduleProviderSettings {
         static let authHeaderName = "schedule.provider.authHeaderName"
         static let authQueryKey = "schedule.provider.authQueryKey"
     }
+
+    private static func migrateLegacySecretsIfNeeded() {
+        let defaults = UserDefaults.standard
+
+        if let legacyAuth = defaults.string(forKey: Keys.authToken),
+           !legacyAuth.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           SecureKeychainService.shared.string(for: Keys.authToken) == nil {
+            SecureKeychainService.shared.set(legacyAuth, for: Keys.authToken)
+            defaults.removeObject(forKey: Keys.authToken)
+        }
+
+        if let legacyPartner = defaults.string(forKey: Keys.partnerToken),
+           !legacyPartner.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           SecureKeychainService.shared.string(for: Keys.partnerToken) == nil {
+            SecureKeychainService.shared.set(legacyPartner, for: Keys.partnerToken)
+            defaults.removeObject(forKey: Keys.partnerToken)
+        }
+    }
 }
 
 enum ScheduleProviderError: LocalizedError {
     case missingEndpointTemplate
     case invalidEndpoint
+    case insecureEndpoint
     case unauthorized
     case forbidden
     case unexpectedStatus(Int)
@@ -129,6 +157,8 @@ enum ScheduleProviderError: LocalizedError {
             return "Set a provider endpoint first."
         case .invalidEndpoint:
             return "The provider endpoint is invalid."
+        case .insecureEndpoint:
+            return "Use an HTTPS provider endpoint to protect VIN and credential traffic."
         case .unauthorized:
             return "Authorization failed (401). Check credentials."
         case .forbidden:
@@ -236,11 +266,21 @@ enum ManufacturerScheduleSync {
             case .emptyResponse, .noSupportedItems:
                 return .invalidResponse(error.localizedDescription)
             default:
-                return .failed(error.localizedDescription)
+                return .failed(userSafeMessage(for: error))
             }
         } catch {
-            return .failed(error.localizedDescription)
+            return .failed(userSafeMessage(for: error))
         }
+    }
+
+    static func userSafeMessage(for error: Error) -> String {
+        if let providerError = error as? ScheduleProviderError {
+            return providerError.localizedDescription
+        }
+        if let vinError = error as? VINDecodeError {
+            return vinError.localizedDescription
+        }
+        return "Could not reach the schedule provider. Check your VIN, endpoint, credentials, and network connection."
     }
 
     private static func fetchTemplates(for vehicle: Vehicle, settings: ScheduleProviderSettings) async throws -> FetchTemplatesResult {
@@ -288,6 +328,9 @@ enum ManufacturerScheduleSync {
 
         guard let url = endpointComponents?.url else {
             throw ScheduleProviderError.invalidEndpoint
+        }
+        guard url.scheme?.lowercased() == "https" else {
+            throw ScheduleProviderError.insecureEndpoint
         }
 
         var request = URLRequest(url: url)
@@ -480,7 +523,12 @@ enum ManufacturerScheduleSync {
     private static func cacheKey(for vehicle: Vehicle) -> String? {
         let vin = VINDecoder.sanitize(vehicle.vin ?? "")
         guard !vin.isEmpty else { return nil }
-        return "manufacturer.schedule.\(vin)"
+        return "manufacturer.schedule.\(hashedKeyFragment(for: vin))"
+    }
+
+    private static func hashedKeyFragment(for value: String) -> String {
+        let digest = SHA256.hash(data: Data(value.utf8))
+        return digest.map { String(format: "%02x", $0) }.joined()
     }
 }
 

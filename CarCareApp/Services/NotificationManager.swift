@@ -17,10 +17,15 @@ final class NotificationManager {
 
         let content = UNMutableNotificationContent()
         content.title = reminder.title ?? "Service Reminder"
-        content.body = "\(vehicleName): due on \(Self.dateFormatter.string(from: dueDate))"
+        if reminder.dueMileage > 0 {
+            content.body = "\(vehicleName): due on \(Self.dateFormatter.string(from: dueDate)) or at \(Formatters.mileageLabel(reminder.dueMileage)) mi"
+        } else {
+            content.body = "\(vehicleName): due on \(Self.dateFormatter.string(from: dueDate))"
+        }
         content.sound = .default
 
-        let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: dueDate)
+        let notificationDate = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: dueDate) ?? dueDate
+        let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: notificationDate)
         let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
 
         let identifier = reminder.notificationID ?? UUID().uuidString

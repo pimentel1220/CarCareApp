@@ -26,6 +26,17 @@ struct VehicleFormView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(vehiclePreviewTitle)
+                            .font(.headline)
+                        Text(vehiclePreviewSubtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 4)
+                }
+
                 Section("Photo") {
                     PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
                         if let data = photoData, let image = UIImage(data: data) {
@@ -59,6 +70,8 @@ struct VehicleFormView: View {
                 Section("Identifiers") {
                     TextField("VIN", text: $vin, axis: .vertical)
                         .lineLimit(1...3)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled(true)
                     TextField("Plate", text: $plate, axis: .vertical)
                         .lineLimit(1...3)
                     Button(isDecodingVIN ? "Decoding..." : "Decode VIN") {
@@ -70,6 +83,11 @@ struct VehicleFormView: View {
                 Section("Tracking") {
                     TextField("Current Mileage", text: $currentMileage)
                         .keyboardType(.numbersAndPunctuation)
+                    if vehicle == nil {
+                        Text("You can leave mileage blank for now and add it later.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Section("Notes") {
@@ -101,7 +119,45 @@ struct VehicleFormView: View {
                     }
                 }
             }
+            .onChange(of: vin) { newValue in
+                let sanitized = VINDecoder.sanitize(newValue)
+                if sanitized != newValue {
+                    vin = sanitized
+                }
+            }
         }
+    }
+
+    private var vehiclePreviewTitle: String {
+        let title = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !title.isEmpty { return title }
+
+        let built = [
+            year.trimmingCharacters(in: .whitespacesAndNewlines),
+            make.trimmingCharacters(in: .whitespacesAndNewlines),
+            model.trimmingCharacters(in: .whitespacesAndNewlines)
+        ]
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+
+        return built.isEmpty ? "New Vehicle" : built
+    }
+
+    private var vehiclePreviewSubtitle: String {
+        var details: [String] = []
+        let trimmedTrim = trim.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedEngine = engine.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedPlate = plate.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if !trimmedTrim.isEmpty { details.append(trimmedTrim) }
+        if !trimmedEngine.isEmpty { details.append(trimmedEngine) }
+        if !trimmedPlate.isEmpty { details.append("Plate \(trimmedPlate)") }
+        if !trimmedVIN.isEmpty { details.append("VIN \(trimmedVIN)") }
+
+        return details.isEmpty
+            ? "Add the basics first. VIN decode can help fill in the rest."
+            : details.joined(separator: " • ")
     }
 
     private func loadVehicle() {

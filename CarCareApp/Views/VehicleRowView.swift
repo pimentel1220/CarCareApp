@@ -25,10 +25,18 @@ struct VehicleRowView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(vehicle.displayName)
                     .font(.headline)
-                Text(vehicle.plate ?? "No plate")
+                Text(vehicleRowSubtitle)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private var vehicleRowSubtitle: String {
+        let plateText = (vehicle.plate ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let mileageText = vehicle.latestKnownMileage > 0 ? "\(Formatters.mileageLabel(vehicle.latestKnownMileage)) mi" : nil
+
+        let parts = [plateText.isEmpty ? nil : plateText, mileageText].compactMap { $0 }
+        return parts.isEmpty ? "No plate or mileage yet" : parts.joined(separator: " • ")
     }
 }

@@ -15,6 +15,7 @@ struct ReminderFormView: View {
     @State private var intervalMonths = ""
     @State private var intervalMiles = ""
     @State private var linkedServiceLogID: UUID?
+    @State private var originalMileage: Double = 0
 
     var body: some View {
         NavigationStack {
@@ -30,6 +31,21 @@ struct ReminderFormView: View {
                     DatePicker("Date", selection: $lastServiceDate, displayedComponents: .date)
                     TextField("Mileage", text: $lastServiceMileage)
                         .keyboardType(.numbersAndPunctuation)
+
+                    HStack {
+                        Button("Use Current Mileage") {
+                            lastServiceMileage = Formatters.mileageText(vehicle.latestKnownMileage)
+                        }
+                        .disabled(vehicle.latestKnownMileage <= 0)
+
+                        Spacer()
+
+                        Button("Use Linked Service") {
+                            applyLinkedServiceDetails()
+                        }
+                        .disabled(vehicle.log(with: linkedServiceLogID) == nil)
+                    }
+                    .font(.caption)
                 }
 
                 Section("Interval") {
@@ -37,6 +53,10 @@ struct ReminderFormView: View {
                         .keyboardType(.numberPad)
                     TextField("Miles", text: $intervalMiles)
                         .keyboardType(.numbersAndPunctuation)
+
+                    Button("Use Recommended Interval") {
+                        applyRecommendedInterval()
+                    }
                 }
 
                 Section("Linked Service") {
@@ -51,6 +71,10 @@ struct ReminderFormView: View {
                             }
                         }
                         .pickerStyle(.menu)
+
+                        Button("Use Linked Service Details") {
+                            applyLinkedServiceDetails()
+                        }
                     }
                 }
 
@@ -65,6 +89,12 @@ struct ReminderFormView: View {
                         Text("Mileage: \(Formatters.mileageLabel(dueMileage))")
                     } else {
                         Text("Mileage: Not set")
+                    }
+
+                    if dueDate == nil && dueMileage != nil {
+                        Text("Mileage-only reminders are tracked in the app, but iPhone alerts need a due date.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -82,6 +112,10 @@ struct ReminderFormView: View {
                 }
             }
             .onAppear(perform: loadExistingReminder)
+            .onChange(of: linkedServiceLogID) { _ in
+                guard existingReminder == nil else { return }
+                applyLinkedServiceDetailsIfNeeded()
+            }
         }
     }
 
@@ -113,9 +147,11 @@ struct ReminderFormView: View {
                 intervalMiles = Formatters.mileageText(existingReminder.repeatIntervalMiles)
             }
             linkedServiceLogID = existingReminder.linkedServiceLogID
+            originalMileage = existingReminder.lastServiceMileage
         } else if vehicle.latestKnownMileage > 0 {
             lastServiceMileage = Formatters.mileageText(vehicle.latestKnownMileage)
             linkedServiceLogID = vehicle.sortedLogs.first?.id
+            applyLinkedServiceDetailsIfNeeded()
         }
     }
 
@@ -137,6 +173,14 @@ struct ReminderFormView: View {
         let serviceMileage = Formatters.parseMileage(lastServiceMileage) ?? 0
         guard serviceMileage >= 0 else {
             AppErrorCenter.shared.message = "Mileage cannot be negative."
+            return false
+        }
+        if existingReminder != nil, serviceMileage > 0, serviceMileage < originalMileage {
+            AppErrorCenter.shared.message = "Reminder mileage cannot be lower than the previous value."
+            return false
+        }
+        if existingReminder == nil, serviceMileage > 0, serviceMileage < vehicle.latestKnownMileage {
+            AppErrorCenter.shared.message = "Reminder mileage cannot be lower than the current vehicle mileage."
             return false
         }
 
@@ -177,5 +221,57 @@ struct ReminderFormView: View {
         let name = (log.title ?? "Service").trimmingCharacters(in: .whitespacesAndNewlines)
         let date = log.date.formatted(date: .abbreviated, time: .omitted)
         return "\(name) - \(date)"
+    }
+
+    private func applyLinkedServiceDetailsIfNeeded() {
+        guard title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            return
+        }
+        applyLinkedServiceDetails()
+    }
+
+    private func applyLinkedServiceDetails() {
+        guard let linkedService = vehicle.log(with: linkedServiceLogID) else { return }
+
+        if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            title = "\(linkedService.title ?? "Service") Reminder"
+        }
+
+        if details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            details = "Reminder tied to \(linkedService.title ?? "service") on \(linkedService.date.formatted(date: .abbreviated, time: .omitted))."
+        }
+
+        lastServiceDate = linkedService.date
+        if linkedService.mileage > 0 {
+            lastServiceMileage = Formatters.mileageText(linkedService.mileage)
+        }
+
+        applyRecommendedInterval()
+    }
+
+    private func applyRecommendedInterval() {
+        let sourceName = reminderSourceName
+        guard let template = ManufacturerServiceRecommendations.template(for: sourceName, vehicle: vehicle) else {
+            AppErrorCenter.shared.message = "No recommendation found for this reminder yet."
+            return
+        }
+
+        intervalMonths = template.intervalMonths > 0 ? String(template.intervalMonths) : ""
+        intervalMiles = template.intervalMiles > 0 ? Formatters.mileageText(template.intervalMiles) : ""
+        AppFeedbackCenter.shared.show("Recommended interval applied")
+    }
+
+    private var reminderSourceName: String {
+        if let linkedService = vehicle.log(with: linkedServiceLogID),
+           let linkedTitle = linkedService.title,
+           !linkedTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return linkedTitle
+        }
+        let trimmedTitle = title
+            .replacingOccurrences(of: " Reminder", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedTitle.isEmpty ? "Inspection" : trimmedTitle
     }
 }

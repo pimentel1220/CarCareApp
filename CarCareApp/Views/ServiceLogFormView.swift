@@ -8,6 +8,7 @@ struct ServiceLogFormView: View {
 
     @ObservedObject var vehicle: Vehicle
     var existingLog: ServiceLog?
+    var initialServiceType: String? = nil
     var onOpenParts: (() -> Void)? = nil
     var onOpenReminders: (() -> Void)? = nil
 
@@ -26,6 +27,8 @@ struct ServiceLogFormView: View {
 
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var photoData: Data?
+    @State private var showingReceiptPreview = false
+    @State private var receiptExportURL: URL?
 
     var body: some View {
         NavigationStack {
@@ -52,6 +55,21 @@ struct ServiceLogFormView: View {
                         .keyboardType(.decimalPad)
                     TextField("Shop", text: $shop, axis: .vertical)
                         .lineLimit(1...4)
+
+                    HStack {
+                        Button("Use Current Mileage") {
+                            mileage = Formatters.mileageText(vehicle.latestKnownMileage)
+                        }
+                        .disabled(vehicle.latestKnownMileage <= 0)
+
+                        Spacer()
+
+                        Button("Use Last Shop") {
+                            shop = mostRecentShop
+                        }
+                        .disabled(mostRecentShop.isEmpty)
+                    }
+                    .font(.caption)
                 }
 
                 Section("Details") {
@@ -145,17 +163,63 @@ struct ServiceLogFormView: View {
                 }
 
                 Section("Receipt Photo") {
-                    PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                        if let data = photoData, let image = UIImage(data: data) {
+                    if let data = photoData, let image = UIImage(data: data) {
+                        Button {
+                            showingReceiptPreview = true
+                        } label: {
                             Image(uiImage: image)
                                 .resizable()
                                 .scaledToFill()
                                 .frame(height: 180)
+                                .frame(maxWidth: .infinity)
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
-                        } else {
+                                .overlay(alignment: .bottomTrailing) {
+                                    Label("Tap to View", systemImage: "arrow.up.left.and.arrow.down.right")
+                                        .font(.caption2.weight(.semibold))
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 6)
+                                        .background(.ultraThinMaterial, in: Capsule())
+                                        .padding(10)
+                                }
+                        }
+                        .buttonStyle(.plain)
+
+                        HStack {
+                            PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                                Label("Replace Photo", systemImage: "arrow.triangle.2.circlepath")
+                            }
+                            .buttonStyle(.bordered)
+
+                            Button {
+                                showingReceiptPreview = true
+                            } label: {
+                                Label("View Full Screen", systemImage: "photo")
+                            }
+                            .buttonStyle(.bordered)
+                        }
+
+                        HStack {
+                            if let receiptExportURL {
+                                ShareLink(item: receiptExportURL) {
+                                    Label("Download / Share", systemImage: "square.and.arrow.down")
+                                }
+                                .buttonStyle(.borderedProminent)
+                            }
+
+                            Button(role: .destructive) {
+                                photoData = nil
+                                selectedPhotoItem = nil
+                            } label: {
+                                Label("Remove", systemImage: "trash")
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    } else {
+                        PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
                             EmptyStateView("Add Photo", systemImage: "doc")
                                 .frame(height: 180)
                         }
+                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -180,6 +244,9 @@ struct ServiceLogFormView: View {
                     }
                 }
             }
+            .onChange(of: photoData) { _ in
+                refreshReceiptExportURL()
+            }
             .onChange(of: serviceType) { _ in
                 guard existingLog == nil else { return }
                 applyDefaultReminderInterval()
@@ -198,12 +265,22 @@ struct ServiceLogFormView: View {
                     details = log.details ?? ""
                     photoData = log.photoData
                     originalMileage = log.mileage
-                } else if vehicle.latestKnownMileage > 0 {
-                    mileage = Formatters.mileageText(vehicle.latestKnownMileage)
+                } else {
+                    if let initialServiceType,
+                       ServiceTemplates.popularServiceTypes.contains(initialServiceType) {
+                        serviceType = initialServiceType
+                    }
+                    if vehicle.latestKnownMileage > 0 {
+                        mileage = Formatters.mileageText(vehicle.latestKnownMileage)
+                    }
                 }
                 if existingLog == nil {
                     applyDefaultReminderInterval(force: true)
                 }
+                refreshReceiptExportURL()
+            }
+            .fullScreenCover(isPresented: $showingReceiptPreview) {
+                ReceiptPreviewView(photoData: photoData, exportURL: receiptExportURL)
             }
         }
     }
@@ -288,6 +365,12 @@ struct ServiceLogFormView: View {
             return trimmed.isEmpty ? "Custom Service" : trimmed
         }
         return serviceType
+    }
+
+    private var mostRecentShop: String {
+        vehicle.sortedLogs
+            .compactMap { $0.shop?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty } ?? ""
     }
 
     private func createServiceReminder(for log: ServiceLog) -> Reminder? {
@@ -376,5 +459,136 @@ struct ServiceLogFormView: View {
 
     private func linkedReminders(for log: ServiceLog) -> [Reminder] {
         vehicle.sortedReminders.filter { $0.linkedServiceLogID == log.id }
+    }
+
+    private func refreshReceiptExportURL() {
+        guard let photoData else {
+            receiptExportURL = nil
+            return
+        }
+
+        do {
+            let receiptID = existingLog?.id.uuidString ?? UUID().uuidString
+            let tempURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("service-receipt-\(receiptID).jpg")
+            try photoData.write(to: tempURL, options: .atomic)
+            receiptExportURL = tempURL
+        } catch {
+            receiptExportURL = nil
+        }
+    }
+}
+
+private struct ReceiptPreviewView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let photoData: Data?
+    let exportURL: URL?
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if let photoData, let image = UIImage(data: photoData) {
+                    ZoomableReceiptImage(image: image)
+                        .background(Color.black)
+                } else {
+                    VStack(spacing: 12) {
+                        Image(systemName: "photo")
+                            .font(.system(size: 40))
+                            .foregroundStyle(.secondary)
+                        Text("No Receipt Photo")
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.black)
+                }
+            }
+            .ignoresSafeArea(edges: .bottom)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Done") { dismiss() }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    if let exportURL {
+                        ShareLink(item: exportURL) {
+                            Label("Share", systemImage: "square.and.arrow.up")
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Receipt")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+}
+
+private struct ZoomableReceiptImage: View {
+    let image: UIImage
+    @State private var scale: CGFloat = 1
+    @State private var lastScale: CGFloat = 1
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
+
+    var body: some View {
+        GeometryReader { proxy in
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .scaleEffect(scale)
+                .offset(offset)
+                .frame(width: proxy.size.width, height: proxy.size.height)
+                .gesture(dragGesture)
+                .simultaneousGesture(magnificationGesture)
+                .onTapGesture(count: 2) {
+                    withAnimation(.easeInOut) {
+                        if scale > 1 {
+                            resetZoom()
+                        } else {
+                            scale = 2
+                        }
+                    }
+                }
+        }
+        .background(Color.black)
+    }
+
+    private var magnificationGesture: some Gesture {
+        MagnificationGesture()
+            .onChanged { value in
+                let proposedScale = lastScale * value
+                scale = min(max(proposedScale, 1), 5)
+            }
+            .onEnded { _ in
+                lastScale = scale
+                if scale <= 1 {
+                    resetZoom()
+                }
+            }
+    }
+
+    private var dragGesture: some Gesture {
+        DragGesture()
+            .onChanged { value in
+                guard scale > 1 else { return }
+                offset = CGSize(
+                    width: lastOffset.width + value.translation.width,
+                    height: lastOffset.height + value.translation.height
+                )
+            }
+            .onEnded { _ in
+                if scale > 1 {
+                    lastOffset = offset
+                } else {
+                    resetZoom()
+                }
+            }
+    }
+
+    private func resetZoom() {
+        scale = 1
+        lastScale = 1
+        offset = .zero
+        lastOffset = .zero
     }
 }

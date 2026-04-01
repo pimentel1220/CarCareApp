@@ -1,7 +1,7 @@
 # CarCareApp Beta Release Checklist
 
 ## 1) Xcode/Signing
-- Open `/Users/carlos/Documents/New project/CarCareApp/CarCareApp.xcodeproj`.
+- Open `CarCareApp.xcodeproj`.
 - Select target `CarCareApp` -> `Signing & Capabilities`.
 - Confirm Team is selected.
 - Confirm Bundle Identifier is unique and valid.
@@ -52,4 +52,3 @@
   - No crash in critical flows.
   - VIN sync + reminders + backup/restore all pass.
   - At least one successful provider sync with production credentials.
-

@@ -10,13 +10,31 @@ struct MaintenanceLogView: View {
     @State private var showingAddLog = false
     @State private var editingLog: ServiceLog?
     @State private var selectedType = "All"
+    @State private var draftServiceType = "Oil Change"
 
     var body: some View {
         List {
+            Section("Quick Add") {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(quickAddTypes, id: \.self) { type in
+                            Button(type) {
+                                draftServiceType = type
+                                showingAddLog = true
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+            }
+
             if filteredLogs.isEmpty {
                 VStack(spacing: 16) {
                     EmptyStateView("No Service Logs", systemImage: "wrench", message: "Tap below to add your first service entry.")
                     Button("Add Service") {
+                        draftServiceType = "Oil Change"
                         showingAddLog = true
                     }
                     .buttonStyle(.borderedProminent)
@@ -53,6 +71,7 @@ struct MaintenanceLogView: View {
                         Text("Service Logs")
                         Spacer()
                         Button("Add Service") {
+                            draftServiceType = "Oil Change"
                             showingAddLog = true
                         }
                         .font(.subheadline)
@@ -75,6 +94,7 @@ struct MaintenanceLogView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
+                    draftServiceType = "Oil Change"
                     showingAddLog = true
                 } label: {
                     Label("Add Service", systemImage: "plus")
@@ -82,7 +102,12 @@ struct MaintenanceLogView: View {
             }
         }
         .sheet(isPresented: $showingAddLog) {
-            ServiceLogFormView(vehicle: vehicle, onOpenParts: onOpenParts, onOpenReminders: onOpenReminders)
+            ServiceLogFormView(
+                vehicle: vehicle,
+                initialServiceType: draftServiceType,
+                onOpenParts: onOpenParts,
+                onOpenReminders: onOpenReminders
+            )
         }
         .sheet(item: $editingLog) { log in
             ServiceLogFormView(vehicle: vehicle, existingLog: log, onOpenParts: onOpenParts, onOpenReminders: onOpenReminders)
@@ -102,6 +127,17 @@ struct MaintenanceLogView: View {
             return vehicle.sortedLogs
         }
         return vehicle.sortedLogs.filter { ($0.title ?? "") == selectedType }
+    }
+
+    private var quickAddTypes: [String] {
+        [
+            "Oil Change",
+            "Tire Rotation",
+            "Battery",
+            "Brake Pads/Rotors",
+            "Engine Air Filter",
+            "Cabin Air Filter"
+        ]
     }
 
     private func deleteLogs(offsets: IndexSet) {
@@ -129,17 +165,24 @@ private struct ServiceLogRowView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(log.title ?? "Service")
                 .font(.headline)
-            Text(log.date, style: .date)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            HStack {
-                Text("Mileage: \(Formatters.mileageLabel(log.mileage))")
+            HStack(spacing: 10) {
+                Text(log.date, style: .date)
+                if log.mileage > 0 {
+                    Text("\(Formatters.mileageLabel(log.mileage)) mi")
+                }
                 if log.cost > 0 {
-                    Text("Cost: $\(String(format: "%.2f", log.cost))")
+                    Text("$\(String(format: "%.2f", log.cost))")
                 }
             }
-            .font(.caption)
+            .font(.subheadline)
             .foregroundStyle(.secondary)
+
+            if let shop = log.shop, !shop.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(shop)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
 
             if !linkedPartNames.isEmpty {
                 Text("Parts: \(linkedPartNames.joined(separator: ", "))")
