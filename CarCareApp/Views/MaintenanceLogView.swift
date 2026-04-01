@@ -11,6 +11,7 @@ struct MaintenanceLogView: View {
     @State private var editingLog: ServiceLog?
     @State private var selectedType = "All"
     @State private var draftServiceType = "Oil Change"
+    @State private var logPendingDeletion: ServiceLog?
 
     var body: some View {
         List {
@@ -32,18 +33,15 @@ struct MaintenanceLogView: View {
 
             if filteredLogs.isEmpty {
                 VStack(spacing: 16) {
-                    EmptyStateView("No Service Logs", systemImage: "wrench", message: "Tap below to add your first service entry.")
+                    EmptyStateView("No Service History Yet", systemImage: "wrench", message: "Start with your latest service so this vehicle has a clear maintenance timeline.")
                     Button("Add Service") {
                         draftServiceType = "Oil Change"
                         showingAddLog = true
                     }
                     .buttonStyle(.borderedProminent)
-                    Button("Go to Parts") {
-                        onOpenParts?()
-                    }
-                    Button("Go to Reminders") {
-                        onOpenReminders?()
-                    }
+                    Text("A saved service can also create reminders and link parts.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             } else {
                 Section {
@@ -64,11 +62,15 @@ struct MaintenanceLogView: View {
                             }
                             .tint(.blue)
                         }
+                        .swipeActions(edge: .trailing) {
+                            Button("Delete", role: .destructive) {
+                                logPendingDeletion = log
+                            }
+                        }
                     }
-                    .onDelete(perform: deleteLogs)
                 } header: {
                     HStack {
-                        Text("Service Logs")
+                        Text("Service History")
                         Spacer()
                         Button("Add Service") {
                             draftServiceType = "Oil Change"
@@ -112,6 +114,16 @@ struct MaintenanceLogView: View {
         .sheet(item: $editingLog) { log in
             ServiceLogFormView(vehicle: vehicle, existingLog: log, onOpenParts: onOpenParts, onOpenReminders: onOpenReminders)
         }
+        .alert("Delete Service?", isPresented: logDeleteAlertBinding) {
+            Button("Cancel", role: .cancel) {
+                logPendingDeletion = nil
+            }
+            Button("Delete", role: .destructive) {
+                confirmDeleteLog()
+            }
+        } message: {
+            Text("This will remove \(logPendingDeletion?.title ?? "this service") from the maintenance history.")
+        }
     }
 
     private var filterTypes: [String] {
@@ -140,10 +152,19 @@ struct MaintenanceLogView: View {
         ]
     }
 
-    private func deleteLogs(offsets: IndexSet) {
+    private var logDeleteAlertBinding: Binding<Bool> {
+        Binding(
+            get: { logPendingDeletion != nil },
+            set: { if !$0 { logPendingDeletion = nil } }
+        )
+    }
+
+    private func confirmDeleteLog() {
+        guard let logPendingDeletion else { return }
         withAnimation {
-            offsets.map { filteredLogs[$0] }.forEach(viewContext.delete)
-            saveContext(savedMessage: "Service deleted")
+            viewContext.delete(logPendingDeletion)
+            saveContext(savedMessage: "Service removed")
+            self.logPendingDeletion = nil
         }
     }
 
@@ -152,7 +173,7 @@ struct MaintenanceLogView: View {
             try viewContext.save()
             AppFeedbackCenter.shared.show(savedMessage)
         } catch {
-            AppErrorCenter.shared.message = error.localizedDescription
+            AppErrorCenter.shared.message = "Could not save your maintenance changes right now."
         }
     }
 }

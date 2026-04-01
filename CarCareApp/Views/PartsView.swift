@@ -8,6 +8,7 @@ struct PartsView: View {
     @State private var showingAddPart = false
     @State private var editingPart: PartReplacement?
     @State private var draftPartName = "Oil Filter"
+    @State private var partPendingDeletion: PartReplacement?
 
     var body: some View {
         List {
@@ -29,12 +30,15 @@ struct PartsView: View {
 
             if vehicle.sortedParts.isEmpty {
                 VStack(spacing: 16) {
-                    EmptyStateView("No Parts", systemImage: "gearshape", message: "Track replaced parts and intervals.")
+                    EmptyStateView("No Parts Tracked Yet", systemImage: "gearshape", message: "Add a part after you replace it so you remember when it was installed.")
                     Button("Add Part") {
                         draftPartName = "Oil Filter"
                         showingAddPart = true
                     }
                     .buttonStyle(.borderedProminent)
+                    Text("Good examples: filters, brakes, battery, wiper blades, and tires.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             } else {
                 Section {
@@ -45,11 +49,15 @@ struct PartsView: View {
                             PartRowView(part: part, vehicle: vehicle, currentMileage: vehicle.currentMileage)
                         }
                         .buttonStyle(.plain)
+                        .swipeActions(edge: .trailing) {
+                            Button("Delete", role: .destructive) {
+                                partPendingDeletion = part
+                            }
+                        }
                     }
-                    .onDelete(perform: deleteParts)
                 } header: {
                     HStack {
-                        Text("Parts")
+                        Text("Replacement History")
                         Spacer()
                         Button("Add Part") {
                             draftPartName = "Oil Filter"
@@ -77,12 +85,31 @@ struct PartsView: View {
         .sheet(item: $editingPart) { part in
             PartReplacementFormView(vehicle: vehicle, existingPart: part)
         }
+        .alert("Delete Part?", isPresented: partDeleteAlertBinding) {
+            Button("Cancel", role: .cancel) {
+                partPendingDeletion = nil
+            }
+            Button("Delete", role: .destructive) {
+                confirmDeletePart()
+            }
+        } message: {
+            Text("This will remove \(partPendingDeletion?.partName ?? "this part") from the replacement history.")
+        }
     }
 
-    private func deleteParts(offsets: IndexSet) {
+    private var partDeleteAlertBinding: Binding<Bool> {
+        Binding(
+            get: { partPendingDeletion != nil },
+            set: { if !$0 { partPendingDeletion = nil } }
+        )
+    }
+
+    private func confirmDeletePart() {
+        guard let partPendingDeletion else { return }
         withAnimation {
-            offsets.map { vehicle.sortedParts[$0] }.forEach(viewContext.delete)
-            saveContext(savedMessage: "Part deleted")
+            viewContext.delete(partPendingDeletion)
+            saveContext(savedMessage: "Part removed")
+            self.partPendingDeletion = nil
         }
     }
 
@@ -91,7 +118,7 @@ struct PartsView: View {
             try viewContext.save()
             AppFeedbackCenter.shared.show(savedMessage)
         } catch {
-            AppErrorCenter.shared.message = error.localizedDescription
+            AppErrorCenter.shared.message = "Could not save your part changes right now."
         }
     }
 

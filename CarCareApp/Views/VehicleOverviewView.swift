@@ -73,31 +73,40 @@ struct VehicleOverviewView: View {
                 Button {
                     onOpenMaintenance()
                 } label: {
-                    Label("Add Service Log", systemImage: "plus.circle")
+                    Label("Log Service", systemImage: "plus.circle")
                 }
 
                 Button {
                     onOpenParts()
                 } label: {
-                    Label("Add Part Replacement", systemImage: "gear.badge")
+                    Label("Track Part Replacement", systemImage: "gear.badge")
                 }
 
                 Button {
                     onOpenReminders()
                 } label: {
-                    Label("Add Reminder", systemImage: "bell.badge.fill")
+                    Label("Set Reminder", systemImage: "bell.badge.fill")
                 }
 
                 Button {
                     onOpenInfo()
                 } label: {
-                    Label("Edit Vehicle Info", systemImage: "square.and.pencil")
+                    Label("View Vehicle Details", systemImage: "square.and.pencil")
                 }
             }
 
-            Section("Upcoming Services") {
+            Section("What Needs Attention") {
                 if vehicle.upcomingReminders.isEmpty {
-                    emptyRow("No active reminders yet", systemImage: "calendar.badge.exclamationmark")
+                    Button {
+                        onOpenReminders()
+                    } label: {
+                        emptyActionRow(
+                            title: "No reminders yet",
+                            message: "Set one now so this screen can tell you what is coming up.",
+                            systemImage: "calendar.badge.exclamationmark"
+                        )
+                    }
+                    .buttonStyle(.plain)
                 } else {
                     ForEach(vehicle.upcomingReminders.prefix(3)) { reminder in
                         Button {
@@ -118,7 +127,16 @@ struct VehicleOverviewView: View {
 
             Section("Recent Maintenance") {
                 if vehicle.recentLogs.isEmpty {
-                    emptyRow("No maintenance history yet", systemImage: "wrench")
+                    Button {
+                        onOpenMaintenance()
+                    } label: {
+                        emptyActionRow(
+                            title: "No service history yet",
+                            message: "Log your first service so you can build a reliable maintenance record.",
+                            systemImage: "wrench"
+                        )
+                    }
+                    .buttonStyle(.plain)
                 } else {
                     ForEach(vehicle.recentLogs.prefix(3)) { log in
                         Button {
@@ -139,7 +157,16 @@ struct VehicleOverviewView: View {
 
             Section("Recent Part Replacements") {
                 if vehicle.recentParts.isEmpty {
-                    emptyRow("No part replacements yet", systemImage: "gearshape")
+                    Button {
+                        onOpenParts()
+                    } label: {
+                        emptyActionRow(
+                            title: "No part replacements yet",
+                            message: "Track parts here when you swap filters, brakes, batteries, and more.",
+                            systemImage: "gearshape"
+                        )
+                    }
+                    .buttonStyle(.plain)
                 } else {
                     ForEach(vehicle.recentParts.prefix(3)) { part in
                         Button {
@@ -185,9 +212,9 @@ struct VehicleOverviewView: View {
     @ViewBuilder
     private var statusStrip: some View {
         let overdueCount = vehicle.upcomingReminders.filter { reminder in
-            (reminder.dueDate.map { $0 <= Date() } ?? false) ||
-            (reminder.dueMileage > 0 && reminder.dueMileage <= vehicle.latestKnownMileage)
+            vehicle.reminderUrgency(for: reminder) == .overdue
         }.count
+        let dueSoonCount = vehicle.upcomingReminders.filter { vehicle.reminderUrgency(for: $0) == .dueSoon }.count
 
         let recentActivity = vehicle.sortedLogs.first?.date ?? vehicle.sortedParts.first?.date
 
@@ -196,6 +223,10 @@ struct VehicleOverviewView: View {
                 Label("\(overdueCount) overdue reminder\(overdueCount == 1 ? "" : "s") need attention", systemImage: "exclamationmark.triangle.fill")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.orange)
+            } else if dueSoonCount > 0 {
+                Label("\(dueSoonCount) reminder\(dueSoonCount == 1 ? "" : "s") due soon", systemImage: "clock.badge.exclamationmark.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.yellow)
             } else {
                 Label("No overdue reminders right now", systemImage: "checkmark.circle.fill")
                     .font(.caption.weight(.semibold))
@@ -229,10 +260,16 @@ struct VehicleOverviewView: View {
     }
 
     @ViewBuilder
-    private func emptyRow(_ message: String, systemImage: String) -> some View {
-        Label(message, systemImage: systemImage)
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
+    private func emptyActionRow(title: String, message: String, systemImage: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(title, systemImage: systemImage)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 4)
     }
 }
 
@@ -268,19 +305,23 @@ private struct OverviewReminderRow: View {
     let currentMileage: Double
 
     var body: some View {
+        let urgency = reminder.vehicle?.reminderUrgency(for: reminder) ?? .upcoming
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
-                Text(reminder.title ?? "Reminder")
-                    .font(.headline)
+                HStack(spacing: 8) {
+                    Text(reminder.title ?? "Reminder")
+                        .font(.headline)
+                    urgencyBadge(urgency)
+                }
 
                 HStack(spacing: 10) {
                     if let dueDate = reminder.dueDate {
-                        Text(dueDate <= Date() ? "Overdue since \(dueDate.formatted(date: .abbreviated, time: .omitted))" : "Due \(dueDate.formatted(date: .abbreviated, time: .omitted))")
+                        Text(dateLine(for: dueDate, urgency: urgency))
                     }
 
                     if reminder.dueMileage > 0 {
                         let remaining = reminder.dueMileage - currentMileage
-                        Text(remaining <= 0 ? "Over by \(Formatters.mileageLabel(abs(remaining))) mi" : "In \(Formatters.mileageLabel(remaining)) mi")
+                        Text(mileageLine(for: remaining, urgency: urgency))
                     }
                 }
                 .font(.caption)
@@ -295,6 +336,57 @@ private struct OverviewReminderRow: View {
         }
         .padding(.vertical, 2)
         .contentShape(Rectangle())
+    }
+
+    private func urgencyBadge(_ urgency: ReminderUrgency) -> some View {
+        Text(urgencyTitle(urgency))
+            .font(.caption2.weight(.semibold))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(urgencyColor(urgency).opacity(0.14))
+            .foregroundStyle(urgencyColor(urgency))
+            .clipShape(Capsule())
+    }
+
+    private func urgencyTitle(_ urgency: ReminderUrgency) -> String {
+        switch urgency {
+        case .overdue: return "Overdue"
+        case .dueSoon: return "Due Soon"
+        case .upcoming: return "Upcoming"
+        case .completed: return "Done"
+        }
+    }
+
+    private func urgencyColor(_ urgency: ReminderUrgency) -> Color {
+        switch urgency {
+        case .overdue: return .red
+        case .dueSoon: return .orange
+        case .upcoming: return .blue
+        case .completed: return .secondary
+        }
+    }
+
+    private func dateLine(for dueDate: Date, urgency: ReminderUrgency) -> String {
+        switch urgency {
+        case .overdue:
+            return "Overdue since \(dueDate.formatted(date: .abbreviated, time: .omitted))"
+        case .dueSoon:
+            return "Due soon: \(dueDate.formatted(date: .abbreviated, time: .omitted))"
+        case .upcoming, .completed:
+            return "Due \(dueDate.formatted(date: .abbreviated, time: .omitted))"
+        }
+    }
+
+    private func mileageLine(for remaining: Double, urgency: ReminderUrgency) -> String {
+        let milesText = Formatters.mileageLabel(abs(remaining))
+        switch urgency {
+        case .overdue:
+            return "Over by \(milesText) mi"
+        case .dueSoon:
+            return "Due soon: \(milesText) mi"
+        case .upcoming, .completed:
+            return "In \(Formatters.mileageLabel(max(remaining, 0))) mi"
+        }
     }
 }
 

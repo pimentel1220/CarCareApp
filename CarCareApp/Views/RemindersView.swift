@@ -7,44 +7,48 @@ struct RemindersView: View {
 
     @State private var showingAddReminder = false
     @State private var editingReminder: Reminder?
+    @State private var reminderPendingDeletion: Reminder?
 
     var body: some View {
         List {
             if activeReminders.isEmpty {
                 VStack(spacing: 16) {
-                    EmptyStateView("No Reminders", systemImage: "bell", message: "Add a reminder to track upcoming service.")
+                    EmptyStateView("No Reminders Yet", systemImage: "bell", message: "Set your first reminder so this app can tell you what needs attention next.")
                     Button("Add Reminder") {
                         showingAddReminder = true
                     }
                     .buttonStyle(.borderedProminent)
+                    Text("Tip: reminders are easiest right after you save a service.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             } else {
-                Section {
-                    ForEach(activeReminders) { reminder in
-                        Button {
-                            editingReminder = reminder
-                        } label: {
-                            ReminderRowView(reminder: reminder, vehicle: vehicle, currentMileage: vehicle.currentMileage)
+                if !urgentReminders.isEmpty {
+                    Section {
+                        ForEach(urgentReminders) { reminder in
+                            reminderButton(reminder)
                         }
-                        .buttonStyle(.plain)
-                        .swipeActions(edge: .trailing) {
-                            Button("Done") {
-                                reminder.isCompleted = true
-                                NotificationManager.shared.removeNotification(for: reminder)
-                                saveContext(savedMessage: "Reminder completed")
-                            }
-                            .tint(.green)
-                        }
+                    } header: {
+                        Text("Needs Attention")
+                    } footer: {
+                        Text("Overdue and due-soon reminders stay at the top so you can act quickly.")
                     }
-                    .onDelete(perform: deleteReminders)
-                } header: {
-                    HStack {
-                        Text("Active")
-                        Spacer()
-                        Button("Add Reminder") {
-                            showingAddReminder = true
+                }
+
+                if !upcomingReminders.isEmpty {
+                    Section {
+                        ForEach(upcomingReminders) { reminder in
+                            reminderButton(reminder)
                         }
-                        .font(.subheadline)
+                    } header: {
+                        HStack {
+                            Text("Coming Up")
+                            Spacer()
+                            Button("Add Reminder") {
+                                showingAddReminder = true
+                            }
+                            .font(.subheadline)
+                        }
                     }
                 }
             }
@@ -66,6 +70,9 @@ struct RemindersView: View {
             Section("Suggested Services") {
                 Text("Source: \(ManufacturerServiceRecommendations.sourceLabel(for: vehicle))")
                     .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("Use these if you want a quick starting point for common maintenance.")
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
 
                 ForEach(recommendationTemplates) { template in
@@ -105,10 +112,31 @@ struct RemindersView: View {
         .sheet(item: $editingReminder) { reminder in
             ReminderFormView(vehicle: vehicle, existingReminder: reminder)
         }
+        .alert("Delete Reminder?", isPresented: reminderDeleteAlertBinding) {
+            Button("Cancel", role: .cancel) {
+                reminderPendingDeletion = nil
+            }
+            Button("Delete", role: .destructive) {
+                confirmDeleteReminder()
+            }
+        } message: {
+            Text("This will remove \(reminderPendingDeletion?.title ?? "this reminder") and cancel its notification.")
+        }
     }
 
     private var activeReminders: [Reminder] {
         vehicle.sortedReminders.filter { !$0.isCompleted }
+    }
+
+    private var urgentReminders: [Reminder] {
+        activeReminders.filter {
+            let urgency = vehicle.reminderUrgency(for: $0)
+            return urgency == .overdue || urgency == .dueSoon
+        }
+    }
+
+    private var upcomingReminders: [Reminder] {
+        activeReminders.filter { vehicle.reminderUrgency(for: $0) == .upcoming }
     }
 
     private var completedReminders: [Reminder] {
@@ -119,13 +147,20 @@ struct RemindersView: View {
         ManufacturerServiceRecommendations.templates(for: vehicle)
     }
 
-    private func deleteReminders(offsets: IndexSet) {
+    private var reminderDeleteAlertBinding: Binding<Bool> {
+        Binding(
+            get: { reminderPendingDeletion != nil },
+            set: { if !$0 { reminderPendingDeletion = nil } }
+        )
+    }
+
+    private func confirmDeleteReminder() {
+        guard let reminderPendingDeletion else { return }
         withAnimation {
-            offsets.map { activeReminders[$0] }.forEach { reminder in
-                NotificationManager.shared.removeNotification(for: reminder)
-                viewContext.delete(reminder)
-            }
-            saveContext(savedMessage: "Reminder deleted")
+            NotificationManager.shared.removeNotification(for: reminderPendingDeletion)
+            viewContext.delete(reminderPendingDeletion)
+            saveContext(savedMessage: "Reminder removed")
+            self.reminderPendingDeletion = nil
         }
     }
 
@@ -134,7 +169,7 @@ struct RemindersView: View {
             try viewContext.save()
             AppFeedbackCenter.shared.show(savedMessage)
         } catch {
-            AppErrorCenter.shared.message = error.localizedDescription
+            AppErrorCenter.shared.message = "Could not save your reminder changes right now."
         }
     }
 
@@ -157,6 +192,27 @@ struct RemindersView: View {
 
         NotificationManager.shared.scheduleNotification(for: reminder, vehicleName: vehicle.displayName)
         saveContext(savedMessage: "Reminder added")
+    }
+
+    @ViewBuilder
+    private func reminderButton(_ reminder: Reminder) -> some View {
+        Button {
+            editingReminder = reminder
+        } label: {
+            ReminderRowView(reminder: reminder, vehicle: vehicle, currentMileage: vehicle.currentMileage)
+        }
+        .buttonStyle(.plain)
+        .swipeActions(edge: .trailing) {
+            Button("Delete", role: .destructive) {
+                reminderPendingDeletion = reminder
+            }
+            Button("Done") {
+                reminder.isCompleted = true
+                NotificationManager.shared.removeNotification(for: reminder)
+                saveContext(savedMessage: "Reminder marked done")
+            }
+            .tint(.green)
+        }
     }
 
     @ViewBuilder
@@ -190,9 +246,13 @@ private struct ReminderRowView: View {
     let currentMileage: Double
 
     var body: some View {
+        let urgency = vehicle.reminderUrgency(for: reminder)
         VStack(alignment: .leading, spacing: 6) {
-            Text(reminder.title ?? "Reminder")
-                .font(.headline)
+            HStack(spacing: 8) {
+                Text(reminder.title ?? "Reminder")
+                    .font(.headline)
+                urgencyBadge(urgency)
+            }
             if let details = reminder.details, !details.isEmpty {
                 Text(details)
                     .font(.caption)
@@ -201,17 +261,17 @@ private struct ReminderRowView: View {
 
             HStack(spacing: 12) {
                 if let dueDate = reminder.dueDate {
-                    Text("Due \(dueDate.formatted(date: .abbreviated, time: .omitted))")
+                    Text(dateLine(for: dueDate, urgency: urgency))
                 }
 
                 if reminder.dueMileage > 0 {
                     let remaining = reminder.dueMileage - currentMileage
                     let milesText = Formatters.mileageLabel(abs(remaining))
-                    Text(remaining <= 0 ? "Overdue by \(milesText) mi" : "Due in \(milesText) mi")
+                    Text(mileageLine(for: remaining, milesText: milesText, urgency: urgency))
                 }
             }
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(urgency == .overdue ? .red : .secondary)
 
             if let linked = vehicle.log(with: reminder.linkedServiceLogID) {
                 Text("Linked service: \(linked.title ?? "Service")")
@@ -220,6 +280,56 @@ private struct ReminderRowView: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
+        }
+    }
+
+    private func urgencyBadge(_ urgency: ReminderUrgency) -> some View {
+        Text(urgencyLabel(urgency))
+            .font(.caption2.weight(.semibold))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(urgencyColor(urgency).opacity(0.14))
+            .foregroundStyle(urgencyColor(urgency))
+            .clipShape(Capsule())
+    }
+
+    private func urgencyLabel(_ urgency: ReminderUrgency) -> String {
+        switch urgency {
+        case .overdue: return "Overdue"
+        case .dueSoon: return "Due Soon"
+        case .upcoming: return "Upcoming"
+        case .completed: return "Done"
+        }
+    }
+
+    private func urgencyColor(_ urgency: ReminderUrgency) -> Color {
+        switch urgency {
+        case .overdue: return .red
+        case .dueSoon: return .orange
+        case .upcoming: return .blue
+        case .completed: return .secondary
+        }
+    }
+
+    private func dateLine(for dueDate: Date, urgency: ReminderUrgency) -> String {
+        switch urgency {
+        case .overdue:
+            return "Overdue since \(dueDate.formatted(date: .abbreviated, time: .omitted))"
+        case .dueSoon:
+            return "Due soon: \(dueDate.formatted(date: .abbreviated, time: .omitted))"
+        case .upcoming, .completed:
+            return "Due \(dueDate.formatted(date: .abbreviated, time: .omitted))"
+        }
+    }
+
+    private func mileageLine(for remaining: Double, milesText: String, urgency: ReminderUrgency) -> String {
+        switch urgency {
+        case .overdue:
+            return "Overdue by \(milesText) mi"
+        case .dueSoon:
+            return "Due soon: \(milesText) mi"
+        case .upcoming, .completed:
+            return "Due in \(Formatters.mileageLabel(max(remaining, 0))) mi"
         }
     }
 }

@@ -28,6 +28,12 @@ struct VehicleRowView: View {
                 Text(vehicleRowSubtitle)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+
+                if let statusLine {
+                    Text(statusLine)
+                        .font(.caption)
+                        .foregroundStyle(statusColor)
+                }
             }
         }
     }
@@ -38,5 +44,28 @@ struct VehicleRowView: View {
 
         let parts = [plateText.isEmpty ? nil : plateText, mileageText].compactMap { $0 }
         return parts.isEmpty ? "No plate or mileage yet" : parts.joined(separator: " • ")
+    }
+
+    private var statusLine: String? {
+        if vehicle.overdueReminderCount > 0 {
+            return "\(vehicle.overdueReminderCount) reminder\(vehicle.overdueReminderCount == 1 ? "" : "s") overdue"
+        }
+        if vehicle.dueSoonReminderCount > 0 {
+            return "\(vehicle.dueSoonReminderCount) reminder\(vehicle.dueSoonReminderCount == 1 ? "" : "s") due soon"
+        }
+        if vehicle.totalServiceCount > 0 {
+            return "Last service \(vehicle.sortedLogs.first?.date.formatted(date: .abbreviated, time: .omitted) ?? "recently")"
+        }
+        return "Ready to log your first service"
+    }
+
+    private var statusColor: Color {
+        if vehicle.overdueReminderCount > 0 {
+            return .red
+        }
+        if vehicle.dueSoonReminderCount > 0 {
+            return .orange
+        }
+        return .secondary
     }
 }

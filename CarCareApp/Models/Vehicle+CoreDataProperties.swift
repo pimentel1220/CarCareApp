@@ -1,6 +1,13 @@
 import Foundation
 import CoreData
 
+enum ReminderUrgency {
+    case overdue
+    case dueSoon
+    case upcoming
+    case completed
+}
+
 extension Vehicle {
     @nonobjc public class func fetchRequest() -> NSFetchRequest<Vehicle> {
         return NSFetchRequest<Vehicle>(entityName: "Vehicle")
@@ -101,17 +108,48 @@ extension Vehicle {
         sortedParts.count
     }
 
-    private func reminderPriority(_ reminder: Reminder) -> Int {
+    var overdueReminderCount: Int {
+        activeReminders.filter { reminderUrgency(for: $0) == .overdue }.count
+    }
+
+    var dueSoonReminderCount: Int {
+        activeReminders.filter { reminderUrgency(for: $0) == .dueSoon }.count
+    }
+
+    func reminderUrgency(for reminder: Reminder, referenceDate: Date = Date()) -> ReminderUrgency {
+        if reminder.isCompleted {
+            return .completed
+        }
+
         let currentMileage = latestKnownMileage
-        if let dueDate = reminder.dueDate, dueDate <= Date() {
-            return 0
+        if let dueDate = reminder.dueDate, dueDate <= referenceDate {
+            return .overdue
         }
         if reminder.dueMileage > 0, currentMileage > 0, reminder.dueMileage <= currentMileage {
+            return .overdue
+        }
+
+        if let dueDate = reminder.dueDate,
+           let soonDate = Calendar.current.date(byAdding: .day, value: 14, to: referenceDate),
+           dueDate <= soonDate {
+            return .dueSoon
+        }
+
+        if reminder.dueMileage > 0, currentMileage > 0, reminder.dueMileage - currentMileage <= 500 {
+            return .dueSoon
+        }
+
+        return .upcoming
+    }
+
+    private func reminderPriority(_ reminder: Reminder) -> Int {
+        switch reminderUrgency(for: reminder) {
+        case .overdue:
             return 0
-        }
-        if reminder.dueDate != nil || reminder.dueMileage > 0 {
+        case .dueSoon, .upcoming:
             return 1
+        case .completed:
+            return 2
         }
-        return 2
     }
 }

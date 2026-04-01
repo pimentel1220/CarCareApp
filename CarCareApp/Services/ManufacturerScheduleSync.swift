@@ -76,8 +76,8 @@ struct ScheduleProviderSettings {
             provider: ScheduleProviderType(rawValue: raw) ?? .auto,
             endpointTemplate: UserDefaults.standard.string(forKey: Keys.endpointTemplate) ?? "",
             authMode: ScheduleAuthMode(rawValue: authRaw) ?? .none,
-            authToken: SecureKeychainService.shared.string(for: Keys.authToken) ?? "",
-            partnerToken: SecureKeychainService.shared.string(for: Keys.partnerToken) ?? "",
+            authToken: SecureKeychainService.shared.providerCredential(for: .authToken) ?? "",
+            partnerToken: SecureKeychainService.shared.providerCredential(for: .partnerToken) ?? "",
             authHeaderName: UserDefaults.standard.string(forKey: Keys.authHeaderName) ?? "X-API-Key",
             authQueryKey: UserDefaults.standard.string(forKey: Keys.authQueryKey) ?? "api_key"
         )
@@ -89,15 +89,15 @@ struct ScheduleProviderSettings {
         UserDefaults.standard.set(authMode.rawValue, forKey: Keys.authMode)
         UserDefaults.standard.set(authHeaderName, forKey: Keys.authHeaderName)
         UserDefaults.standard.set(authQueryKey, forKey: Keys.authQueryKey)
-        SecureKeychainService.shared.set(authToken.trimmingCharacters(in: .whitespacesAndNewlines), for: Keys.authToken)
-        SecureKeychainService.shared.set(partnerToken.trimmingCharacters(in: .whitespacesAndNewlines), for: Keys.partnerToken)
+        SecureKeychainService.shared.setProviderCredential(authToken.trimmingCharacters(in: .whitespacesAndNewlines), for: .authToken)
+        SecureKeychainService.shared.setProviderCredential(partnerToken.trimmingCharacters(in: .whitespacesAndNewlines), for: .partnerToken)
     }
 
     mutating func clearStoredCredentials() {
         authToken = ""
         partnerToken = ""
-        SecureKeychainService.shared.deleteValue(for: Keys.authToken)
-        SecureKeychainService.shared.deleteValue(for: Keys.partnerToken)
+        SecureKeychainService.shared.removeAllProviderCredentials()
+        removeLegacySecretsFromUserDefaults()
     }
 
     mutating func applyCarMDPreset() {
@@ -126,18 +126,25 @@ struct ScheduleProviderSettings {
         let defaults = UserDefaults.standard
 
         if let legacyAuth = defaults.string(forKey: Keys.authToken),
-           !legacyAuth.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           SecureKeychainService.shared.string(for: Keys.authToken) == nil {
-            SecureKeychainService.shared.set(legacyAuth, for: Keys.authToken)
+           !legacyAuth.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if SecureKeychainService.shared.providerCredential(for: .authToken) == nil {
+                SecureKeychainService.shared.setProviderCredential(legacyAuth, for: .authToken)
+            }
             defaults.removeObject(forKey: Keys.authToken)
         }
 
         if let legacyPartner = defaults.string(forKey: Keys.partnerToken),
-           !legacyPartner.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           SecureKeychainService.shared.string(for: Keys.partnerToken) == nil {
-            SecureKeychainService.shared.set(legacyPartner, for: Keys.partnerToken)
+           !legacyPartner.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if SecureKeychainService.shared.providerCredential(for: .partnerToken) == nil {
+                SecureKeychainService.shared.setProviderCredential(legacyPartner, for: .partnerToken)
+            }
             defaults.removeObject(forKey: Keys.partnerToken)
         }
+    }
+
+    private func removeLegacySecretsFromUserDefaults() {
+        UserDefaults.standard.removeObject(forKey: Keys.authToken)
+        UserDefaults.standard.removeObject(forKey: Keys.partnerToken)
     }
 }
 

@@ -6,6 +6,11 @@ final class SecureKeychainService {
 
     private let service = "CarCareApp.secure-config"
 
+    enum ProviderCredentialKey: String, CaseIterable {
+        case authToken = "schedule.provider.authToken"
+        case partnerToken = "schedule.provider.partnerToken"
+    }
+
     private init() {}
 
     func string(for key: String) -> String? {
@@ -51,6 +56,22 @@ final class SecureKeychainService {
     func deleteValue(for key: String) {
         let query = baseQuery(for: key)
         SecItemDelete(query as CFDictionary)
+    }
+
+    func providerCredential(for key: ProviderCredentialKey) -> String? {
+        string(for: key.rawValue)
+    }
+
+    func setProviderCredential(_ value: String, for key: ProviderCredentialKey) {
+        set(value, for: key.rawValue)
+    }
+
+    func removeProviderCredential(_ key: ProviderCredentialKey) {
+        deleteValue(for: key.rawValue)
+    }
+
+    func removeAllProviderCredentials() {
+        ProviderCredentialKey.allCases.forEach(removeProviderCredential)
     }
 
     private func baseQuery(for key: String) -> [String: Any] {
